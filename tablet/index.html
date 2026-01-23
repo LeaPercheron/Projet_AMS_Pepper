@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Assistant Parapharmacie - Pepper</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ==================== ÉCRAN ACCUEIL ==================== -->
+    <div id="screen-home" class="screen active">
+        <div class="home-container">
+            <h1 class="home-title">Bonjour ! 👋</h1>
+            <p class="home-subtitle">Comment puis-je vous aider ?</p>
+
+            <div class="home-buttons">
+                <button class="home-btn home-btn-product" onclick="App.showScreen('scan-choice')">
+                    <span class="btn-icon">📦</span>
+                    <span class="btn-text">PRODUIT</span>
+                    <span class="btn-desc">Identifier un produit</span>
+                </button>
+
+                <button class="home-btn home-btn-question" onclick="App.showScreen('advice')">
+                    <span class="btn-icon">💬</span>
+                    <span class="btn-text">QUESTION GÉNÉRALE</span>
+                    <span class="btn-desc">Conseils capillaires</span>
+                </button>
+            </div>
+
+            <div class="rgpd-notice">
+                <p>🔒 Aucune donnée personnelle n'est collectée ni stockée.<br>
+                Les échanges vocaux sont traités en temps réel et ne sont pas enregistrés.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN CHOIX SCAN ==================== -->
+    <div id="screen-scan-choice" class="screen">
+        <div class="scan-choice-container">
+            <h2>Comment souhaitez-vous identifier le produit ?</h2>
+
+            <div class="scan-choice-buttons">
+                <button class="scan-choice-btn" onclick="App.startVisualScan()">
+                    <span class="btn-icon">📷</span>
+                    <span class="btn-text">Montrer le produit</span>
+                    <span class="btn-desc">Je le montre à la caméra</span>
+                </button>
+
+                <button class="scan-choice-btn" onclick="App.showScreen('barcode-scan')">
+                    <span class="btn-icon">📊</span>
+                    <span class="btn-text">Scanner le code-barres</span>
+                    <span class="btn-desc">Je présente le code-barres</span>
+                </button>
+            </div>
+
+            <button class="back-btn" onclick="App.showScreen('home')">
+                ← Retour à l'accueil
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN SCAN CODE-BARRES ==================== -->
+    <div id="screen-barcode-scan" class="screen">
+        <div class="barcode-container">
+            <h2>Scan du code-barres</h2>
+
+            <div class="barcode-animation">
+                <div class="barcode-frame">
+                    <div class="scan-line"></div>
+                </div>
+                <p class="barcode-instruction">Présentez le code-barres face à la caméra</p>
+            </div>
+
+            <div class="barcode-status">
+                <div id="barcode-status-icon" class="status-icon waiting">⏳</div>
+                <p id="barcode-status-text">En attente du code-barres...</p>
+            </div>
+
+            <div class="barcode-buttons">
+                <button class="secondary-btn" onclick="App.showScreen('scan-choice')">
+                    ← Changer de méthode
+                </button>
+                <button class="back-btn" onclick="App.showScreen('home')">
+                    Retour à l'accueil
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN TOP-3 ==================== -->
+    <div id="screen-top3" class="screen">
+        <div class="top3-container">
+            <h2>Est-ce l'un de ces produits ?</h2>
+            <p class="top3-subtitle">Touchez le produit correspondant</p>
+
+            <div class="top3-cards" id="top3-cards">
+                <!-- Cartes générées dynamiquement -->
+            </div>
+
+            <div class="top3-buttons">
+                <button class="secondary-btn" onclick="App.showScreen('barcode-scan')">
+                    Aucun de ces produits → Scanner le code-barres
+                </button>
+                <button class="back-btn" onclick="App.showScreen('home')">
+                    Retour à l'accueil
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN FICHE PRODUIT ==================== -->
+    <div id="screen-product" class="screen">
+        <div class="product-container">
+            <div class="product-card">
+                <div class="product-image-container">
+                    <img id="product-image" src="" alt="Photo du produit">
+                </div>
+
+                <div class="product-info">
+                    <h2 id="product-name">Nom du produit</h2>
+                    <p id="product-brand" class="product-brand">Marque</p>
+                    <p id="product-price" class="product-price">0,00 €</p>
+
+                    <div class="product-details">
+                        <div class="detail-section">
+                            <h3>Usage</h3>
+                            <p id="product-usage">Description de l'usage...</p>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3>Type de cheveux</h3>
+                            <p id="product-hair-type">Type de cheveux...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="product-buttons">
+                <button class="primary-btn" onclick="App.showScreen('scan-choice')">
+                    📦 Nouveau produit
+                </button>
+                <button class="back-btn" onclick="App.showScreen('home')">
+                    ← Retour à l'accueil
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN CONSEIL GÉNÉRAL ==================== -->
+    <div id="screen-advice" class="screen">
+        <div class="advice-container">
+            <h2>Conseils capillaires</h2>
+
+            <div class="filter-section">
+                <p class="filter-label">Filtrer par type de cheveux :</p>
+                <div class="filter-buttons" id="filter-buttons">
+                    <button class="filter-btn active" data-filter="all" onclick="App.filterProducts('all')">
+                        Tous
+                    </button>
+                    <button class="filter-btn" data-filter="secs" onclick="App.filterProducts('secs')">
+                        Cheveux secs
+                    </button>
+                    <button class="filter-btn" data-filter="gras" onclick="App.filterProducts('gras')">
+                        Cheveux gras
+                    </button>
+                    <button class="filter-btn" data-filter="normaux" onclick="App.filterProducts('normaux')">
+                        Cheveux normaux
+                    </button>
+                    <button class="filter-btn" data-filter="colores" onclick="App.filterProducts('colorés')">
+                        Cheveux colorés
+                    </button>
+                    <button class="filter-btn" data-filter="pellicules" onclick="App.filterProducts('pellicules')">
+                        Anti-pelliculaire
+                    </button>
+                </div>
+            </div>
+
+            <div class="products-grid" id="products-grid">
+                <!-- Produits générés dynamiquement -->
+            </div>
+
+            <button class="back-btn" onclick="App.showScreen('home')">
+                ← Retour à l'accueil
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN ERREUR/SÉCURITÉ ==================== -->
+    <div id="screen-security" class="screen">
+        <div class="security-container">
+            <div class="security-icon">⚠️</div>
+            <h2 id="security-title">Information importante</h2>
+            <p id="security-message" class="security-message">Message de sécurité...</p>
+
+            <button class="primary-btn" onclick="App.showScreen('home')">
+                Retour à l'accueil
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== ÉCRAN CHARGEMENT ==================== -->
+    <div id="screen-loading" class="screen">
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <p id="loading-text">Analyse en cours...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

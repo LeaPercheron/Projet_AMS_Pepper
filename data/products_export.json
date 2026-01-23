@@ -1,0 +1,1264 @@
+{
+  "metadata": {
+    "version": "2.0",
+    "total_products": 29,
+    "exported_at": "2026-01-22 20:06:39"
+  },
+  "products": [
+    {
+      "id": "BIODERMA-NODEDS-001",
+      "ean13": "3401572183283",
+      "name": "Nodé DS+ Shampooing Antipelliculaire",
+      "brand": "Bioderma",
+      "category": "Shampooing",
+      "hair_type": [
+        "Pellicules",
+        "Cuir chevelu irrité"
+      ],
+      "price": 14.5,
+      "currency": "EUR",
+      "volume": "125ml",
+      "usage": "Shampooing traitant antipelliculaire intense.",
+      "instructions": "Appliquer 3x/semaine, masser, laisser 3 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Élimine les pellicules",
+        "Apaise les démangeaisons",
+        "Purifie"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Piroctone Olamine",
+          "benefit": "Antifongique"
+        },
+        {
+          "name": "D.A.F.",
+          "benefit": "Apaisant"
+        }
+      ],
+      "certifications": [],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "bioderma",
+        "node",
+        "ds",
+        "pellicules"
+      ]
+    },
+    {
+      "id": "BIODERMA-NODE-001",
+      "ean13": "3401572183276",
+      "name": "Nodé Shampooing Fluide Non-Détergent",
+      "brand": "Bioderma",
+      "category": "Shampooing",
+      "hair_type": [
+        "Tous types de cheveux",
+        "Usage quotidien"
+      ],
+      "price": 13.9,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing ultra-doux respectant l'équilibre du cuir chevelu.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Usage quotidien.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Respecte le film hydrolipidique",
+        "Douceur maximale",
+        "Non irritant"
+      ],
+      "key_ingredients": [
+        {
+          "name": "D.A.F.",
+          "benefit": "Complexe breveté apaisant"
+        }
+      ],
+      "certifications": [
+        "Sans sulfates",
+        "Sans silicone"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "bioderma",
+        "node",
+        "fluide",
+        "doux"
+      ]
+    },
+    {
+      "id": "DUCRAY-ELUTION-001",
+      "ean13": "3282779328258",
+      "name": "Elution Shampooing Rééquilibrant",
+      "brand": "Ducray",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cuir chevelu sensible",
+        "Après traitement antipelliculaire"
+      ],
+      "price": 13.5,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing doux pour rééquilibrer le cuir chevelu après traitement.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Rééquilibre le cuir chevelu",
+        "Douceur",
+        "Respect du microbiome"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Elugel",
+          "benefit": "Équilibrant"
+        }
+      ],
+      "certifications": [
+        "Sans sulfates"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "ducray",
+        "elution",
+        "reequilibrant",
+        "sensible"
+      ]
+    },
+    {
+      "id": "DUCRAY-EXTRADOUX-001",
+      "ean13": "3282779328241",
+      "name": "Extra-Doux Shampooing Dermo-Protecteur",
+      "brand": "Ducray",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cuir chevelu délicat",
+        "Tous types de cheveux"
+      ],
+      "price": 11.5,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing dermo-protecteur pour cuir chevelu délicat.",
+      "instructions": "Appliquer sur cheveux mouillés, faire mousser, rincer. Usage fréquent.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Haute tolérance",
+        "Respect de l'équilibre",
+        "Hydratation"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Glyceryl Oleate",
+          "benefit": "Hydratant doux"
+        },
+        {
+          "name": "Vitamine E",
+          "benefit": "Antioxydant"
+        }
+      ],
+      "certifications": [
+        "Sans colorant",
+        "Sans silicone",
+        "Biodégradable"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "ducray",
+        "extra doux",
+        "dermo",
+        "delicat"
+      ]
+    },
+    {
+      "id": "DUCRAY-KELUAL-001",
+      "ean13": "3282779328265",
+      "name": "Kelual DS Shampooing Traitant",
+      "brand": "Ducray",
+      "category": "Shampooing",
+      "hair_type": [
+        "Pellicules sévères",
+        "Dermite séborrhéique"
+      ],
+      "price": 14.9,
+      "currency": "EUR",
+      "volume": "100ml",
+      "usage": "Shampooing traitant pour états pelliculaires sévères.",
+      "instructions": "Appliquer 2-3x/semaine, masser, laisser poser 3 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement",
+        "Éviter contact yeux",
+        "Consulter si persistance"
+      ],
+      "benefits": [
+        "Élimine les pellicules",
+        "Apaise les démangeaisons",
+        "Action longue durée"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Ciclopiroxolamine",
+          "benefit": "Antifongique"
+        },
+        {
+          "name": "Acide salicylique",
+          "benefit": "Kératolytique"
+        }
+      ],
+      "certifications": [],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "ducray",
+        "kelual",
+        "pellicules",
+        "traitant"
+      ]
+    },
+    {
+      "id": "GARNIER-AVOCAT-001",
+      "ean13": "3600542154277",
+      "name": "Ultra Doux Avocat Karité Shampooing",
+      "brand": "Garnier",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux frisés",
+        "Cheveux crépus"
+      ],
+      "price": 4.5,
+      "currency": "EUR",
+      "volume": "300ml",
+      "usage": "Shampooing nourrissant pour cheveux frisés à crépus.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Définit les boucles",
+        "Nourrit en profondeur",
+        "Anti-frisottis"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Avocat",
+          "benefit": "Nutrition"
+        },
+        {
+          "name": "Karité",
+          "benefit": "Hydratation"
+        }
+      ],
+      "certifications": [
+        "Cruelty Free International"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "garnier",
+        "ultra doux",
+        "avocat",
+        "karite",
+        "frises"
+      ]
+    },
+    {
+      "id": "GARNIER-ARGAN-001",
+      "ean13": "3600542154260",
+      "name": "Ultra Doux Huile d'Argan Shampooing",
+      "brand": "Garnier",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux secs",
+        "Cheveux très secs"
+      ],
+      "price": 4.5,
+      "currency": "EUR",
+      "volume": "300ml",
+      "usage": "Shampooing nourrissant pour cheveux secs à très secs.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Nutrition intense",
+        "Cheveux souples",
+        "Brillance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Huile d'Argan",
+          "benefit": "Nutrition profonde"
+        }
+      ],
+      "certifications": [
+        "Cruelty Free International"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "garnier",
+        "ultra doux",
+        "argan",
+        "nourrissant"
+      ]
+    },
+    {
+      "id": "GARNIER-MASQUE-MIEL-001",
+      "ean13": "3600542154284",
+      "name": "Ultra Doux Masque Réparateur Trésors de Miel",
+      "brand": "Garnier",
+      "category": "Masque",
+      "hair_type": [
+        "Cheveux fragiles",
+        "Cheveux cassants"
+      ],
+      "price": 6.9,
+      "currency": "EUR",
+      "volume": "300ml",
+      "usage": "Masque réparateur intense pour cheveux fragilisés.",
+      "instructions": "Appliquer sur longueurs après shampooing, laisser 3-5 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Réparation intense",
+        "Nutrition",
+        "Brillance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Miel",
+          "benefit": "Réparation"
+        },
+        {
+          "name": "Gelée Royale",
+          "benefit": "Nutrition"
+        }
+      ],
+      "certifications": [
+        "Cruelty Free"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "garnier",
+        "masque",
+        "miel",
+        "reparateur"
+      ]
+    },
+    {
+      "id": "GARNIER-MIEL-001",
+      "ean13": "3600542154253",
+      "name": "Ultra Doux Trésors de Miel Shampooing",
+      "brand": "Garnier",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux fragiles",
+        "Cheveux cassants",
+        "Cheveux abîmés"
+      ],
+      "price": 4.5,
+      "currency": "EUR",
+      "volume": "300ml",
+      "usage": "Shampooing réparateur pour cheveux fragiles et cassants.",
+      "instructions": "Appliquer sur cheveux mouillés, faire mousser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "10x moins de casse",
+        "53% moins de brèches",
+        "2x moins de fourches"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Gelée Royale",
+          "benefit": "Réparation"
+        },
+        {
+          "name": "Propolis",
+          "benefit": "Protection"
+        },
+        {
+          "name": "Miel",
+          "benefit": "Nutrition"
+        }
+      ],
+      "certifications": [
+        "Cruelty Free International",
+        "Flacon 100% recyclé"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "garnier",
+        "ultra doux",
+        "miel",
+        "reparateur"
+      ]
+    },
+    {
+      "id": "KLORANE-APRES-MANGUE-001",
+      "ean13": "3282770149302",
+      "name": "Après-Shampooing Nutritif à la Mangue",
+      "brand": "Klorane",
+      "category": "Après-shampooing",
+      "hair_type": [
+        "Cheveux secs"
+      ],
+      "price": 11.9,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Après-shampooing nourrissant pour cheveux secs.",
+      "instructions": "Appliquer sur longueurs après shampooing, laisser 2 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Nutrition",
+        "Démêlage facile",
+        "Brillance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Beurre de Mangue",
+          "benefit": "Nutrition"
+        }
+      ],
+      "certifications": [
+        "Vegan"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "klorane",
+        "apres",
+        "mangue",
+        "nutrition"
+      ]
+    },
+    {
+      "id": "KLORANE-PIVOINE-001",
+      "ean13": "3282770149296",
+      "name": "Shampooing Apaisant à la Pivoine",
+      "brand": "Klorane",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cuir chevelu sensible",
+        "Cuir chevelu irrité"
+      ],
+      "price": 12.9,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing apaisant pour cuir chevelu sensible et irrité.",
+      "instructions": "Appliquer sur cheveux mouillés, masser délicatement, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Apaise les irritations",
+        "Calme les démangeaisons",
+        "Haute tolérance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Extrait de Pivoine",
+          "benefit": "Propriétés apaisantes"
+        }
+      ],
+      "certifications": [
+        "Vegan",
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "klorane",
+        "pivoine",
+        "sensible",
+        "apaisant"
+      ]
+    },
+    {
+      "id": "KLORANE-CAMOMILLE-001",
+      "ean13": "3282770149272",
+      "name": "Shampooing Illuminateur à la Camomille",
+      "brand": "Klorane",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux blonds",
+        "Cheveux méchés"
+      ],
+      "price": 12.9,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing éclaircissant pour raviver les reflets dorés des cheveux blonds naturels, méchés ou colorés.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer abondamment.",
+      "precautions": [
+        "Usage externe uniquement",
+        "Éviter contact yeux"
+      ],
+      "benefits": [
+        "Reflets dorés naturels",
+        "Illumine les cheveux blonds",
+        "Formule haute tolérance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Extrait de Camomille",
+          "benefit": "Propriétés éclaircissantes"
+        }
+      ],
+      "certifications": [
+        "Vegan",
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "klorane",
+        "camomille",
+        "blond",
+        "illuminateur"
+      ]
+    },
+    {
+      "id": "KLORANE-ORTIE-001",
+      "ean13": "3282770149289",
+      "name": "Shampooing Séboréducteur à l'Ortie",
+      "brand": "Klorane",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux gras",
+        "Cuir chevelu gras"
+      ],
+      "price": 12.9,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing régulateur pour cheveux à tendance grasse.",
+      "instructions": "Appliquer sur cheveux mouillés, masser le cuir chevelu, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Régule l'excès de sébum",
+        "Purifie le cuir chevelu",
+        "Cheveux légers"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Extrait d'Ortie Bio",
+          "benefit": "Séboréducteur naturel"
+        }
+      ],
+      "certifications": [
+        "Vegan",
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "klorane",
+        "ortie",
+        "gras",
+        "seboregulateur"
+      ]
+    },
+    {
+      "id": "LOREAL-ARGININE-001",
+      "ean13": "3600524029548",
+      "name": "Elsève Arginine Resist X3 Shampooing",
+      "brand": "L'Oréal Paris",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux fragiles",
+        "Cheveux cassants"
+      ],
+      "price": 5.9,
+      "currency": "EUR",
+      "volume": "250ml",
+      "usage": "Shampooing fortifiant pour cheveux fragilisés par les agressions quotidiennes.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "3x moins de casse",
+        "Renforce la fibre",
+        "Cheveux résistants"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Arginine",
+          "benefit": "Acide aminé fortifiant"
+        }
+      ],
+      "certifications": [
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "loreal",
+        "elseve",
+        "arginine",
+        "fortifiant"
+      ]
+    },
+    {
+      "id": "LOREAL-COLOR-VIVE-001",
+      "ean13": "3600524029555",
+      "name": "Elsève Color-Vive Shampooing",
+      "brand": "L'Oréal Paris",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux colorés",
+        "Cheveux méchés"
+      ],
+      "price": 5.9,
+      "currency": "EUR",
+      "volume": "250ml",
+      "usage": "Shampooing protecteur de couleur pour cheveux colorés ou méchés.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Protège la couleur",
+        "Éclat prolongé",
+        "Cheveux brillants"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Filtre UV",
+          "benefit": "Protection contre la décoloration"
+        }
+      ],
+      "certifications": [
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "loreal",
+        "elseve",
+        "color",
+        "colores"
+      ]
+    },
+    {
+      "id": "LOREAL-APRES-HYALURON-001",
+      "ean13": "3600524029562",
+      "name": "Elsève Hyaluron Repulp Démêlant",
+      "brand": "L'Oréal Paris",
+      "category": "Après-shampooing",
+      "hair_type": [
+        "Cheveux déshydratés"
+      ],
+      "price": 6.9,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Démêlant ré-hydratant pour cheveux déshydratés.",
+      "instructions": "Appliquer sur longueurs mouillées, démêler, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Hydratation 72h",
+        "Démêlage facile",
+        "Sans alourdir"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Acide Hyaluronique",
+          "benefit": "Hydratation"
+        }
+      ],
+      "certifications": [],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "loreal",
+        "elseve",
+        "hyaluron",
+        "demelant"
+      ]
+    },
+    {
+      "id": "LOREAL-HYALURON-001",
+      "ean13": "3600524029531",
+      "name": "Elsève Hyaluron Repulp Shampooing",
+      "brand": "L'Oréal Paris",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux déshydratés",
+        "Cheveux fatigués",
+        "Cheveux ternes"
+      ],
+      "price": 6.9,
+      "currency": "EUR",
+      "volume": "250ml",
+      "usage": "Shampooing ré-hydratant pour cheveux déshydratés. Hydratation intense 72h.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Compléter avec le démêlant.",
+      "precautions": [
+        "Usage externe uniquement",
+        "Éviter contact yeux"
+      ],
+      "benefits": [
+        "10x plus d'hydratation",
+        "Hydratation 72h",
+        "Cheveux repulpés"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Acide Hyaluronique Pur",
+          "benefit": "Retient jusqu'à 1000x son poids en eau"
+        }
+      ],
+      "certifications": [
+        "Fabriqué en France",
+        "Flacon 100% recyclé"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "loreal",
+        "elseve",
+        "hyaluron",
+        "hydratant"
+      ]
+    },
+    {
+      "id": "LRP-KERIUM-DOUX-001",
+      "ean13": "3337872414602",
+      "name": "Kerium Doux Extrême Shampooing-Gel",
+      "brand": "La Roche-Posay",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cuir chevelu sensible",
+        "Tous types de cheveux"
+      ],
+      "price": 13.9,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing-gel ultra-doux pour cuir chevelu sensible.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Usage fréquent.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Douceur extrême",
+        "Respecte le cuir chevelu",
+        "Brillance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Eau Thermale",
+          "benefit": "Apaisante"
+        }
+      ],
+      "certifications": [
+        "Sans sulfates",
+        "Sans silicone",
+        "Sans parabène"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "laroche",
+        "kerium",
+        "doux",
+        "sensible"
+      ]
+    },
+    {
+      "id": "LRP-KERIUM-GRAS-001",
+      "ean13": "3337872414619",
+      "name": "Kerium Shampooing-Gel Antipelliculaire Gras",
+      "brand": "La Roche-Posay",
+      "category": "Shampooing",
+      "hair_type": [
+        "Pellicules grasses",
+        "Cuir chevelu gras"
+      ],
+      "price": 14.5,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing traitant antipelliculaire pour cuir chevelu gras.",
+      "instructions": "Appliquer 2x/semaine, masser, laisser 2 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Élimine les pellicules",
+        "Régule le sébum",
+        "Longue durée"
+      ],
+      "key_ingredients": [
+        {
+          "name": "LHA",
+          "benefit": "Kératolytique"
+        }
+      ],
+      "certifications": [],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "laroche",
+        "kerium",
+        "pellicules",
+        "gras"
+      ]
+    },
+    {
+      "id": "MUSTELA-BEBE-001",
+      "ean13": "3504105029791",
+      "name": "Shampooing Mousse Nourrisson",
+      "brand": "Mustela",
+      "category": "Shampooing",
+      "hair_type": [
+        "Bébés",
+        "Nourrissons"
+      ],
+      "price": 9.9,
+      "currency": "EUR",
+      "volume": "150ml",
+      "usage": "Shampooing mousse doux pour le cuir chevelu fragile des nourrissons.",
+      "instructions": "Appliquer sur cuir chevelu humide, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Douceur extrême",
+        "Sans larmes",
+        "Croûtes de lait"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Avocado Perseose",
+          "benefit": "Protection naturelle"
+        }
+      ],
+      "certifications": [
+        "Testé pédiatres",
+        "Hypoallergénique"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "Dès la naissance",
+      "keywords": [
+        "mustela",
+        "bebe",
+        "nourrisson",
+        "mousse"
+      ]
+    },
+    {
+      "id": "NUXE-PRODIGIEUX-001",
+      "ean13": "3264680009761",
+      "name": "Shampooing Prodigieux",
+      "brand": "Nuxe",
+      "category": "Shampooing",
+      "hair_type": [
+        "Tous types de cheveux"
+      ],
+      "price": 14.5,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing sublimateur au parfum iconique Prodigieux.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Parfum envoûtant",
+        "Brillance",
+        "Douceur"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Huiles précieuses",
+          "benefit": "Nutrition"
+        }
+      ],
+      "certifications": [],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "nuxe",
+        "prodigieux",
+        "sublimateur"
+      ]
+    },
+    {
+      "id": "PHYTO-PHYTOCOLOR-001",
+      "ean13": "3338221000101",
+      "name": "Phytocolor Shampooing Protecteur",
+      "brand": "Phyto",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux colorés",
+        "Cheveux méchés"
+      ],
+      "price": 12.9,
+      "currency": "EUR",
+      "volume": "250ml",
+      "usage": "Shampooing protecteur pour prolonger l'éclat des cheveux colorés.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Protège la couleur",
+        "Éclat ravivé",
+        "Cheveux brillants"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Extrait de Quinquina",
+          "benefit": "Protection couleur"
+        }
+      ],
+      "certifications": [
+        "Vegan"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "phyto",
+        "phytocolor",
+        "colores",
+        "protecteur"
+      ]
+    },
+    {
+      "id": "PHYTO-PHYTOCYANE-001",
+      "ean13": "3338221000118",
+      "name": "Phytocyane Shampooing Redensifiant",
+      "brand": "Phyto",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux clairsemés",
+        "Femmes"
+      ],
+      "price": 15.9,
+      "currency": "EUR",
+      "volume": "250ml",
+      "usage": "Shampooing densifiant pour cheveux clairsemés féminins.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Redensifie",
+        "Renforce",
+        "Volume"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Ginkgo Biloba",
+          "benefit": "Stimulant"
+        }
+      ],
+      "certifications": [
+        "Vegan"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "phyto",
+        "phytocyane",
+        "redensifiant",
+        "clairsemes"
+      ]
+    },
+    {
+      "id": "FURTERER-FORTICEA-001",
+      "ean13": "3282770152654",
+      "name": "Forticea Shampooing Énergisant",
+      "brand": "René Furterer",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux fatigués",
+        "Chute de cheveux"
+      ],
+      "price": 16.9,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing stimulant pour cheveux fatigués et clairsemés.",
+      "instructions": "Appliquer sur cheveux mouillés, masser 2 min, rincer. 2-3x/semaine.",
+      "precautions": [
+        "Usage externe uniquement",
+        "Déconseillé femmes enceintes"
+      ],
+      "benefits": [
+        "Stimule la microcirculation",
+        "Renforce les cheveux",
+        "Anti-chute"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Huiles essentielles tonifiantes",
+          "benefit": "Stimulation"
+        }
+      ],
+      "certifications": [
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "furterer",
+        "forticea",
+        "energisant",
+        "chute"
+      ]
+    },
+    {
+      "id": "FURTERER-KARITE-MASQUE-001",
+      "ean13": "3282770152678",
+      "name": "Karité Nutri Masque Nutrition Intense",
+      "brand": "René Furterer",
+      "category": "Masque",
+      "hair_type": [
+        "Cheveux très secs"
+      ],
+      "price": 23.9,
+      "currency": "EUR",
+      "volume": "100ml",
+      "usage": "Masque haute nutrition pour cheveux très secs.",
+      "instructions": "Appliquer sur longueurs après shampooing, laisser 5-10 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Nutrition intense",
+        "Souplesse retrouvée",
+        "Brillance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Beurre de Karité",
+          "benefit": "Nutrition profonde"
+        }
+      ],
+      "certifications": [],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "furterer",
+        "karite",
+        "masque",
+        "nutrition"
+      ]
+    },
+    {
+      "id": "FURTERER-KARITE-001",
+      "ean13": "3282770152661",
+      "name": "Karité Nutri Shampooing Nutrition Intense",
+      "brand": "René Furterer",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux très secs",
+        "Cheveux crépus"
+      ],
+      "price": 15.9,
+      "currency": "EUR",
+      "volume": "150ml",
+      "usage": "Shampooing haute nutrition pour cheveux très secs.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, laisser poser 2 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Nutrition intense",
+        "Souplesse",
+        "Brillance"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Beurre de Karité",
+          "benefit": "Nutrition profonde"
+        }
+      ],
+      "certifications": [
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "furterer",
+        "karite",
+        "nutrition",
+        "secs"
+      ]
+    },
+    {
+      "id": "FURTERER-NATURIA-001",
+      "ean13": "3282770152647",
+      "name": "Naturia Shampooing Micellaire Douceur Bio",
+      "brand": "René Furterer",
+      "category": "Shampooing",
+      "hair_type": [
+        "Tous types de cheveux",
+        "Usage fréquent"
+      ],
+      "price": 14.9,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing ultra-doux pour usage fréquent. Nettoie en douceur.",
+      "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Usage quotidien.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Capture les impuretés",
+        "Respecte le cuir chevelu",
+        "Toute la famille"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Huile de Ricin Bio",
+          "benefit": "Nutrition"
+        },
+        {
+          "name": "Eau Florale de Lavande Bio",
+          "benefit": "Apaisement"
+        }
+      ],
+      "certifications": [
+        "Cosmos Organic",
+        "Vegan",
+        "Sans sulfates",
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "furterer",
+        "naturia",
+        "micellaire",
+        "bio",
+        "doux"
+      ]
+    },
+    {
+      "id": "VICHY-DERCOS-ANTIPEL-001",
+      "ean13": "3337871330194",
+      "name": "Dercos Shampooing Anti-Pelliculaire",
+      "brand": "Vichy",
+      "category": "Shampooing",
+      "hair_type": [
+        "Pellicules",
+        "Cheveux normaux à gras"
+      ],
+      "price": 13.9,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing traitant antipelliculaire pour cheveux normaux à gras.",
+      "instructions": "Appliquer 2-3x/semaine, masser, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Élimine les pellicules",
+        "Apaise le cuir chevelu",
+        "Effet longue durée"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Sélénium DS",
+          "benefit": "Actif antipelliculaire"
+        }
+      ],
+      "certifications": [
+        "Testé sous contrôle dermatologique"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "vichy",
+        "dercos",
+        "antipelliculaire"
+      ]
+    },
+    {
+      "id": "VICHY-DERCOS-ENERGISANT-001",
+      "ean13": "3337871330187",
+      "name": "Dercos Shampooing Énergisant",
+      "brand": "Vichy",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cheveux clairsemés",
+        "Chute de cheveux"
+      ],
+      "price": 14.9,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing fortifiant pour cheveux clairsemés.",
+      "instructions": "Appliquer sur cheveux mouillés, masser 1 min, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Renforce la fibre",
+        "Cheveux plus denses",
+        "Anti-chute"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Aminexil",
+          "benefit": "Ancrage du cheveu"
+        }
+      ],
+      "certifications": [
+        "Testé sous contrôle dermatologique"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "vichy",
+        "dercos",
+        "energisant",
+        "chute"
+      ]
+    }
+  ]
+}

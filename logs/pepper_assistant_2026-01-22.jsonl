@@ -1,0 +1,163 @@
+{"timestamp": "2026-01-22T22:11:18.942088", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-01-22T22:11:18.942339", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-01-22T22:11:18.942403", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-01-22T22:11:19.151175", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-01-22T22:11:19.151394", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-01-22T22:11:19.163339", "level": "WARNING", "event": "warning", "data": {"message": "Module database non disponible: cannot import name 'DatabaseConfig' from 'assistant.database.database_module' (/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/database/database_module.py)"}}
+{"timestamp": "2026-01-22T22:11:19.163460", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-01-22T22:11:19.169813", "level": "WARNING", "event": "warning", "data": {"message": "Module securite non disponible: cannot import name 'Severity' from 'assistant.safety.security_module' (/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/safety/security_module.py)"}}
+{"timestamp": "2026-01-22T22:11:19.169963", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-01-22T22:11:19.170055", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-01-22T22:11:19.170226", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-01-22T22:11:19.205542", "level": "ERROR", "event": "error", "data": {"message": "Erreur chargement tablette", "exception": "TabletServer.__init__() got an unexpected keyword argument 'host'", "traceback": "Traceback (most recent call last):\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/main.py\", line 239, in _setup_tablet\n    self.tablet_server = TabletServer(\n                         ^^^^^^^^^^^^^\nTypeError: TabletServer.__init__() got an unexpected keyword argument 'host'\n"}}
+{"timestamp": "2026-01-22T22:11:19.205646", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-01-22T22:11:19.209676", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-01-22T22:11:19.209721", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "orchestrator"]}}
+{"timestamp": "2026-01-22T22:11:19.209766", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-01-22T22:11:19.209802", "level": "INFO", "event": "session_start", "data": {"session_id": "20260122_221119"}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:11:19.209841", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:11:19.209877", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:11:19.209923", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:11:19.210017", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260122_221119"}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:11:19.210093", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:11:19.210160", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 1 taches paralleles"}, "session_id": "20260122_221119"}
+{"timestamp": "2026-01-22T22:15:27.965451", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-01-22T22:15:27.965657", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-01-22T22:15:27.965727", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-01-22T22:15:28.171400", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-01-22T22:15:28.171639", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-01-22T22:15:28.174862", "level": "WARNING", "event": "warning", "data": {"message": "Module database non disponible: cannot import name 'DatabaseConfig' from 'assistant.database.database_module' (/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/database/database_module.py)"}}
+{"timestamp": "2026-01-22T22:15:28.174938", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-01-22T22:15:28.177775", "level": "WARNING", "event": "warning", "data": {"message": "Module securite non disponible: cannot import name 'Severity' from 'assistant.safety.security_module' (/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/safety/security_module.py)"}}
+{"timestamp": "2026-01-22T22:15:28.177854", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-01-22T22:15:28.177900", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-01-22T22:15:28.177938", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-01-22T22:15:28.194319", "level": "ERROR", "event": "error", "data": {"message": "Erreur chargement tablette", "exception": "TabletServer.__init__() got an unexpected keyword argument 'host'", "traceback": "Traceback (most recent call last):\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/main.py\", line 239, in _setup_tablet\n    self.tablet_server = TabletServer(\n                         ^^^^^^^^^^^^^\nTypeError: TabletServer.__init__() got an unexpected keyword argument 'host'\n"}}
+{"timestamp": "2026-01-22T22:15:28.194473", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-01-22T22:15:28.196078", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-01-22T22:15:28.196207", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "orchestrator"]}}
+{"timestamp": "2026-01-22T22:15:28.196276", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-01-22T22:15:28.196319", "level": "INFO", "event": "session_start", "data": {"session_id": "20260122_221528"}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:15:28.196370", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:15:28.196432", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:15:28.196474", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:15:28.196511", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260122_221528"}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:15:28.196548", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:15:28.196628", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 1 taches paralleles"}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:25:25.553024", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-01-22T22:25:25.553250", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-01-22T22:25:25.553318", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-01-22T22:25:25.759663", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-01-22T22:25:25.760458", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-01-22T22:25:25.773544", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-01-22T22:25:25.773744", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-01-22T22:25:25.781036", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-01-22T22:25:25.781184", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-01-22T22:25:25.781263", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-01-22T22:25:25.781332", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-01-22T22:25:25.800836", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-01-22T22:25:25.800963", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-01-22T22:25:25.802317", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-01-22T22:25:25.802371", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-01-22T22:25:25.802432", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-01-22T22:25:25.802477", "level": "INFO", "event": "session_start", "data": {"session_id": "20260122_222525"}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802542", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802593", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802641", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802688", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260122_222525"}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802734", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802801", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 2 taches paralleles"}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:25.802869", "level": "INFO", "event": "tablet_connected", "data": {"status": "starting"}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:35.516702", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:35.520941", "level": "INFO", "event": "session_end", "data": {"session_id": "20260122_222525", "duration_sec": 9.7, "stats": {"events_logged": 4, "errors": 0, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260122_222525"}
+{"timestamp": "2026-01-22T22:25:35.521802", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 0, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-01-22T22:25:35.522367", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-01-22T22:26:41.435268", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:26:41.438844", "level": "INFO", "event": "session_end", "data": {"session_id": "20260122_221528", "duration_sec": 673.2, "stats": {"events_logged": 3, "errors": 1, "warnings": 2, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260122_221528"}
+{"timestamp": "2026-01-22T22:26:41.438980", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 3, "errors": 1, "warnings": 2, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-01-22T22:26:41.439098", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-01-22T22:27:40.940086", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-01-22T22:27:40.940349", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-01-22T22:27:40.940604", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-01-22T22:27:41.143089", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-01-22T22:27:41.143424", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-01-22T22:27:41.148831", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-01-22T22:27:41.148938", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-01-22T22:27:41.154112", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-01-22T22:27:41.154215", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-01-22T22:27:41.154285", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-01-22T22:27:41.154348", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-01-22T22:27:41.172844", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-01-22T22:27:41.173001", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-01-22T22:27:41.174404", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-01-22T22:27:41.174457", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-01-22T22:27:41.174518", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-01-22T22:27:41.174566", "level": "INFO", "event": "session_start", "data": {"session_id": "20260122_222741"}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.174621", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.174684", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.174742", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.174797", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260122_222741"}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.174894", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.174953", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 2 taches paralleles"}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:41.175016", "level": "INFO", "event": "tablet_connected", "data": {"status": "starting"}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:48.911148", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-01-22T22:27:48.911392", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-01-22T22:27:48.911651", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-01-22T22:27:49.117644", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-01-22T22:27:49.117909", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-01-22T22:27:49.122873", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-01-22T22:27:49.122999", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-01-22T22:27:49.127745", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-01-22T22:27:49.127833", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-01-22T22:27:49.127888", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-01-22T22:27:49.127931", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-01-22T22:27:49.148507", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-01-22T22:27:49.148675", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-01-22T22:27:49.150034", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-01-22T22:27:49.150085", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-01-22T22:27:49.150138", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-01-22T22:27:49.150185", "level": "INFO", "event": "session_start", "data": {"session_id": "20260122_222749"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150230", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150277", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150317", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150353", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260122_222749"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150389", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150447", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 2 taches paralleles"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.150518", "level": "INFO", "event": "tablet_connected", "data": {"status": "starting"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:49.153384", "level": "ERROR", "event": "error", "data": {"message": "Erreur serveur tablette", "exception": "[Errno 48] error while attempting to bind on address ('0.0.0.0', 8765): [errno 48] address already in use", "traceback": "Traceback (most recent call last):\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/main.py\", line 361, in _run_tablet_server\n    await self.tablet_server.start()\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/tablet/server.py\", line 159, in start\n    async with websockets.serve(\n               ^^^^^^^^^^^^^^^^^\n  File \"/Users/leapercheron/Library/Python/3.12/lib/python/site-packages/websockets/asyncio/server.py\", line 813, in __aenter__\n    return await self\n           ^^^^^^^^^^\n  File \"/Users/leapercheron/Library/Python/3.12/lib/python/site-packages/websockets/asyncio/server.py\", line 831, in __await_impl__\n    server = await self.create_server\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py\", line 1571, in create_server\n    raise OSError(err.errno, msg) from None\nOSError: [Errno 48] error while attempting to bind on address ('0.0.0.0', 8765): [errno 48] address already in use\n"}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:27:55.946204", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:55.947239", "level": "INFO", "event": "session_end", "data": {"session_id": "20260122_222741", "duration_sec": 14.8, "stats": {"events_logged": 4, "errors": 0, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260122_222741"}
+{"timestamp": "2026-01-22T22:27:55.947349", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 0, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-01-22T22:27:55.947435", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-01-22T22:28:11.174014", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:28:11.175133", "level": "INFO", "event": "session_end", "data": {"session_id": "20260122_222749", "duration_sec": 22.0, "stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260122_222749"}
+{"timestamp": "2026-01-22T22:28:11.175340", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-01-22T22:28:11.175479", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-01-22T22:28:19.508959", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-01-22T22:28:19.509203", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-01-22T22:28:19.509533", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-01-22T22:28:19.715744", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-01-22T22:28:19.716018", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-01-22T22:28:19.721257", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-01-22T22:28:19.721357", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-01-22T22:28:19.726915", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-01-22T22:28:19.727096", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-01-22T22:28:19.727177", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-01-22T22:28:19.727242", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-01-22T22:28:19.746029", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-01-22T22:28:19.746196", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-01-22T22:28:19.747594", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-01-22T22:28:19.747659", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-01-22T22:28:19.747725", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-01-22T22:28:19.747778", "level": "INFO", "event": "session_start", "data": {"session_id": "20260122_222819"}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.747833", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.747883", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.747938", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.747993", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260122_222819"}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.748043", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.748114", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 2 taches paralleles"}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:28:19.748193", "level": "INFO", "event": "tablet_connected", "data": {"status": "starting"}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:32:42.800440", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:32:42.806150", "level": "INFO", "event": "session_end", "data": {"session_id": "20260122_222819", "duration_sec": 263.1, "stats": {"events_logged": 4, "errors": 0, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260122_222819"}
+{"timestamp": "2026-01-22T22:32:42.806519", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 0, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-01-22T22:32:42.806683", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
