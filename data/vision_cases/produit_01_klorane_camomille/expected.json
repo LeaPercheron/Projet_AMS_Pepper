@@ -1,0 +1,14 @@
+{
+  "ean13": "3282770149272",
+  "product_name": "Klorane Shampooing Illuminateur Camomille",
+  "brand": "Klorane",
+  "expected_top1": "Klorane Shampooing Camomille",
+  "expected_top3": [
+    "Klorane Shampooing Camomille",
+    "Klorane Shampooing Avoine",
+    "Ducray Extra-Doux"
+  ],
+  "barcode_visible_frames": [3],
+  "difficulty": "easy",
+  "notes": "Produit bien visible, etiquette lisible, code-barres sur frame 3"
+}
