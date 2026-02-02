@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Tests unitaires rapides (Programme seul)
-========================================
-Vise a valider les parties critiques: arbitrage vision, securite, machine a etats.
-
-Usage:
-    python scripts/mock/unit_tests.py
-"""
+# Tests unitaires rapides (Programme seul)
 
 from __future__ import annotations
 
@@ -29,20 +22,24 @@ class TestResult:
 
 
 def _print_header(title: str) -> None:
+    # Gere header.
     print("\n" + "=" * 70)
     print(title)
     print("=" * 70)
 
 
 def _record(results: List[TestResult], name: str, ok: bool, message: str = "") -> None:
+    # Gere l'action.
     results.append(TestResult(name=name, passed=ok, message=message, skipped=False))
 
 
 def _record_skip(results: List[TestResult], name: str, reason: str) -> None:
+    # Gere skip.
     results.append(TestResult(name=name, passed=False, message=reason, skipped=True))
 
 
 def test_vision_arbitrage(results: List[TestResult]) -> None:
+    # Gere vision arbitrage.
     _print_header("B1 - Vision arbitrage")
     try:
         from PIL import Image
@@ -69,25 +66,31 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
     # Doubles deterministes
     class DummyBarcodeDetector:
         def __init__(self, result):
+            # Initialise l'objet.
             self._result = result
 
         def detect_in_images(self, images):
+            # Gere in images.
             return self._result
 
     class DummyVLM:
         def __init__(self, confidence: float, name: str, brand: str, top3: Optional[List[VLMResult]] = None):
+            # Initialise l'objet.
             self._confidence = confidence
             self._name = name
             self._brand = brand
             self._top3 = top3 or []
 
         def load_model(self):
+            # Charge model.
             return True
 
         def classify_hair_product(self, image):
+            # Gere hair product.
             return True, 0.99
 
         def identify_product(self, image):
+            # Gere product.
             return VLMResult(
                 product_name=self._name,
                 brand=self._brand,
@@ -98,10 +101,12 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
             )
 
         def identify_with_top3(self, image):
+            # Gere with top3.
             return self._top3
 
     class DummyCapture:
         def preprocess_for_vlm(self, image):
+            # Gere for vlm.
             return image
 
     images = [Image.new("RGB", (10, 10), color="white") for _ in range(3)]
@@ -152,6 +157,7 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
 
 
 def test_security(results: List[TestResult]) -> None:
+    # Gere security.
     _print_header("B1 - Securite")
     try:
         from assistant.safety.security_module import SecurityModule
@@ -173,6 +179,7 @@ def test_security(results: List[TestResult]) -> None:
 
 
 def test_state_machine(results: List[TestResult]) -> None:
+    # Gere state machine.
     _print_header("B1 - Machine a etats")
     try:
         from assistant.orchestrator.orchestrator import StateMachine, OrchestratorConfig, State, Event
@@ -183,6 +190,7 @@ def test_state_machine(results: List[TestResult]) -> None:
     sm = StateMachine(OrchestratorConfig(log_transitions=False))
 
     def _go(event, expected_state):
+        # Gere l'action.
         ok = sm.process_event(event)
         return ok and sm.state == expected_state
 
@@ -209,6 +217,7 @@ def test_state_machine(results: List[TestResult]) -> None:
 
 
 def main() -> int:
+    # Gere l'action.
     results: List[TestResult] = []
 
     test_vision_arbitrage(results)

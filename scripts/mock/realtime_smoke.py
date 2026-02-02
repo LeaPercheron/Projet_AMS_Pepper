@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Smoke test OpenAI Realtime (Programme seul)
-===========================================
-Teste connexion WS, envoi audio et reception d'evenements.
-
-Usage:
-    python scripts/mock/realtime_smoke.py --audio data/corpus_audio/speech_clean_48k.wav
-"""
+# Smoke test OpenAI Realtime (Programme seul)
 
 from __future__ import annotations
 
@@ -23,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 def _load_wav_mono_24k(path: Path) -> bytes:
+    # Charge wav mono 24k.
     with wave.open(str(path), "rb") as wf:
         channels = wf.getnchannels()
         rate = wf.getframerate()
@@ -39,6 +33,7 @@ def _load_wav_mono_24k(path: Path) -> bytes:
 
 
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Smoke test OpenAI Realtime")
     parser.add_argument("--audio", type=str, help="WAV PCM16 24k mono a envoyer")
     parser.add_argument("--duration", type=float, default=4.0, help="Duree d'attente (s)")
@@ -61,18 +56,22 @@ def main() -> int:
     events = {"connected": False, "audio": 0, "transcript": 0, "errors": 0}
 
     def on_connected():
+        # Gere connected.
         events["connected"] = True
         print("[EVENT] Connected")
 
     def on_audio_received(audio):
+        # Gere audio received.
         events["audio"] += 1
         print(f"[EVENT] Audio received: {len(audio)} bytes")
 
     def on_transcript(text):
+        # Gere transcript.
         events["transcript"] += 1
         print(f"[EVENT] Transcript: {text}")
 
     def on_error(error):
+        # Gere error.
         events["errors"] += 1
         print(f"[EVENT] Error: {error}")
 

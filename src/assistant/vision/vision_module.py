@@ -1,23 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 5 - Module Vision (VLM)
-=============================
-Identification de produits par analyse visuelle.
-Combine VLM (mlx-vlm) et détection code-barres (pyzbar).
-
-Features:
-- Capture multi-images (3 frames)
-- Classification préalable (produit capillaire OUI/NON)
-- Identification avec Top-3 et scores de confiance
-- Détection code-barres parallèle
-- Logique d'arbitrage VLM/code-barres
-
-Usage:
-    from vision_module import VisionPipeline, create_vision_pipeline
-
-    pipeline = create_vision_pipeline()
-    result = await pipeline.identify_product(images)
-"""
+# Phase 5 - Module Vision (VLM)
 
 import os
 import sys
@@ -27,7 +9,7 @@ import tempfile
 import struct
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
@@ -46,13 +28,61 @@ CONFIDENCE_LOW = 0.60  # Fallback code-barres
 # Modèle VLM
 MODEL_NAME = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
 
+# API PUBLIQUE (COMPAT INTEGRATION)
 
-# =============================================================================
+try:
+    from assistant.config import VisionConfig as VisionConfig
+except Exception:
+    @dataclass
+    class VisionConfig:
+        # Configuration module vision (fallback si assistant.config absent).
+        camera_index: int = 0
+        camera_width: int = 640
+        camera_height: int = 480
+        camera_fps: int = 30
+        num_frames: int = 3
+        capture_interval_ms: int = 200
+        vlm_model: str = MODEL_NAME
+        vlm_max_tokens: int = 100
+        confidence_high: float = CONFIDENCE_HIGH
+        confidence_medium: float = CONFIDENCE_MEDIUM
+        confidence_low: float = CONFIDENCE_LOW
+        barcode_min_detections: int = 2
+
+
+class ConfidenceLevel(Enum):
+    # Niveau de confiance simplifié pour l'API publique.
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    FAILED = "failed"
+
+
+@dataclass
+class ProductPrediction:
+    # Prédiction produit pour l'API publique.
+    product_id: Optional[str]
+    name: str
+    brand: str
+    confidence: float
+    source: str
+
+
+@dataclass
+class VisionResult:
+    # Résultat simplifié pour l'API publique.
+    success: bool
+    confidence_level: ConfidenceLevel
+    top_prediction: Optional[ProductPrediction] = None
+    predictions: List[ProductPrediction] = field(default_factory=list)
+    message: str = ""
+    raw_result: Optional["IdentificationResult"] = None
+
+
 # STRUCTURES DE DONNÉES
-# =============================================================================
 
 class IdentificationSource(Enum):
-    """Source de l'identification."""
+    # Source de l'identification.
     BARCODE = "barcode"          # Code-barres détecté
     VLM_HIGH = "vlm_high"        # VLM confiance >= 85%
     VLM_MEDIUM = "vlm_medium"    # VLM confiance 60-85%
@@ -63,7 +93,7 @@ class IdentificationSource(Enum):
 
 @dataclass
 class BarcodeResult:
-    """Résultat de détection code-barres."""
+    # Résultat de détection code-barres.
     ean13: str
     confidence: float  # Nombre d'images où le code a été trouvé / total
     positions: List[Tuple[int, int, int, int]]  # Bounding boxes
@@ -72,7 +102,7 @@ class BarcodeResult:
 
 @dataclass
 class VLMResult:
-    """Résultat d'analyse VLM."""
+    # Résultat d'analyse VLM.
     product_name: str
     brand: str
     confidence: float
@@ -83,7 +113,7 @@ class VLMResult:
 
 @dataclass
 class ProductCandidate:
-    """Candidat produit avec score."""
+    # Candidat produit avec score.
     product_id: str
     name: str
     brand: str
@@ -93,7 +123,7 @@ class ProductCandidate:
 
 @dataclass
 class IdentificationResult:
-    """Résultat final d'identification."""
+    # Résultat final d'identification.
     success: bool
     source: IdentificationSource
     product_id: Optional[str] = None
@@ -119,38 +149,26 @@ class IdentificationResult:
 
 @dataclass
 class CaptureConfig:
-    """Configuration de capture."""
+    # Configuration de capture.
     num_frames: int = 3
     frame_interval_ms: int = 100  # Intervalle entre frames (rafale)
     use_burst: bool = True  # True = rafale rapide, False = espacé
     resize_to_vlm: bool = True  # Redimensionner à 448x448
 
 
-# =============================================================================
 # CAPTURE D'IMAGES
-# =============================================================================
 
 class ImageCapture:
-    """
-    Capture d'images depuis la caméra Pepper.
-    """
+    # Capture d'images depuis la caméra Pepper.
 
     def __init__(self, config: Optional[CaptureConfig] = None):
+        # Initialise l'objet.
         self.config = config or CaptureConfig()
         self._naoqi_video = None
         self._subscriber_id = None
 
     def connect_pepper(self, pepper_ip: str, port: int = 9559) -> bool:
-        """
-        Connexion à la caméra Pepper via NAOqi.
-
-        Args:
-            pepper_ip: Adresse IP de Pepper
-            port: Port NAOqi
-
-        Returns:
-            True si connexion réussie
-        """
+        # Connexion à la caméra Pepper via NAOqi.
         try:
             import qi
             session = qi.Session()
@@ -176,12 +194,7 @@ class ImageCapture:
             return False
 
     def capture_frames(self) -> List[Image.Image]:
-        """
-        Capture plusieurs frames selon la configuration.
-
-        Returns:
-            Liste d'images PIL
-        """
+        # Capture plusieurs frames selon la configuration.
         frames = []
 
         if self._naoqi_video and self._subscriber_id:
@@ -195,7 +208,7 @@ class ImageCapture:
         return frames
 
     def _capture_from_pepper(self) -> List[Image.Image]:
-        """Capture depuis la caméra Pepper."""
+        # Capture depuis la caméra Pepper.
         frames = []
 
         for i in range(self.config.num_frames):
@@ -222,16 +235,7 @@ class ImageCapture:
         return frames
 
     def load_images_from_paths(self, paths: List[str]) -> List[Image.Image]:
-        """
-        Charge des images depuis des chemins de fichiers.
-        Utile pour les tests.
-
-        Args:
-            paths: Liste de chemins d'images
-
-        Returns:
-            Liste d'images PIL
-        """
+        # Charge des images depuis des chemins de fichiers.
         images = []
         for path in paths:
             try:
@@ -244,16 +248,7 @@ class ImageCapture:
         return images
 
     def preprocess_for_vlm(self, image: Image.Image) -> Image.Image:
-        """
-        Prétraite une image pour le VLM.
-        Redimensionne à 448x448.
-
-        Args:
-            image: Image PIL
-
-        Returns:
-            Image redimensionnée
-        """
+        # Prétraite une image pour le VLM.
         # Redimensionner en gardant le ratio puis centrer
         target_size = VLM_TARGET_SIZE
 
@@ -272,7 +267,7 @@ class ImageCapture:
         return result
 
     def disconnect(self):
-        """Déconnexion de Pepper."""
+        # Déconnexion de Pepper.
         if self._naoqi_video and self._subscriber_id:
             try:
                 self._naoqi_video.unsubscribe(self._subscriber_id)
@@ -282,16 +277,13 @@ class ImageCapture:
             self._subscriber_id = None
 
 
-# =============================================================================
 # DÉTECTION CODE-BARRES
-# =============================================================================
 
 class BarcodeDetector:
-    """
-    Détection de codes-barres avec pyzbar.
-    """
+    # Détection de codes-barres avec pyzbar.
 
     def __init__(self):
+        # Initialise l'objet.
         self._pyzbar_available = False
         try:
             from pyzbar import pyzbar
@@ -301,16 +293,7 @@ class BarcodeDetector:
             print("[BarcodeDetector] pyzbar non disponible - pip install pyzbar")
 
     def detect_in_images(self, images: List[Image.Image]) -> Optional[BarcodeResult]:
-        """
-        Détecte les codes-barres dans plusieurs images.
-        Valide si même EAN trouvé dans 2+ images.
-
-        Args:
-            images: Liste d'images PIL
-
-        Returns:
-            BarcodeResult si trouvé et validé, None sinon
-        """
+        # Détecte les codes-barres dans plusieurs images.
         if not self._pyzbar_available:
             return None
 
@@ -373,15 +356,7 @@ class BarcodeDetector:
         return None
 
     def detect_single(self, image: Image.Image) -> List[str]:
-        """
-        Détecte les codes-barres dans une seule image.
-
-        Args:
-            image: Image PIL
-
-        Returns:
-            Liste des EAN-13 trouvés
-        """
+        # Détecte les codes-barres dans une seule image.
         if not self._pyzbar_available:
             return []
 
@@ -393,17 +368,13 @@ class BarcodeDetector:
             return []
 
 
-# =============================================================================
 # MODULE VLM
-# =============================================================================
 
 class VLMModule:
-    """
-    Module VLM pour identification visuelle.
-    Utilise mlx-vlm avec Qwen2-VL-2B-Instruct-4bit.
-    """
+    # Module VLM pour identification visuelle.
 
     def __init__(self, product_database: Optional[Dict[str, Any]] = None):
+        # Initialise l'objet.
         self.model = None
         self.processor = None
         self.config = None
@@ -415,7 +386,7 @@ class VLMModule:
         self._product_names = self._build_product_names()
 
     def _build_product_names(self) -> str:
-        """Construit la liste des produits pour le prompt."""
+        # Construit la liste des produits pour le prompt.
         if not self.product_database:
             return ""
 
@@ -426,7 +397,7 @@ class VLMModule:
         return "\n".join(lines)
 
     def load_model(self) -> bool:
-        """Charge le modèle VLM."""
+        # Charge le modèle VLM.
         print("[VLM] Chargement du modèle...")
         start_time = time.time()
 
@@ -453,15 +424,7 @@ class VLMModule:
             return False
 
     def classify_hair_product(self, image: Image.Image) -> Tuple[bool, float]:
-        """
-        Classification préalable : est-ce un produit capillaire ?
-
-        Args:
-            image: Image PIL
-
-        Returns:
-            (is_hair_product, confidence)
-        """
+        # Classification préalable : est-ce un produit capillaire ?
         if not self.is_loaded:
             return False, 0.0
 
@@ -493,15 +456,7 @@ CONFIANCE: 0-100"""
         return False, 0.0
 
     def identify_product(self, image: Image.Image) -> VLMResult:
-        """
-        Identifie un produit capillaire.
-
-        Args:
-            image: Image PIL
-
-        Returns:
-            VLMResult avec produit identifié
-        """
+        # Identifie un produit capillaire.
         if not self.is_loaded:
             return VLMResult(
                 product_name="",
@@ -548,15 +503,7 @@ Si tu ne peux pas lire le texte, indique CONFIANCE: 0."""
         )
 
     def identify_with_top3(self, image: Image.Image) -> List[VLMResult]:
-        """
-        Identifie un produit et retourne Top-3 candidats.
-
-        Args:
-            image: Image PIL
-
-        Returns:
-            Liste de VLMResult (jusqu'à 3)
-        """
+        # Identifie un produit et retourne Top-3 candidats.
         if not self.is_loaded:
             return []
 
@@ -607,7 +554,7 @@ Réponds avec 3 propositions au format:
         return results[:3]
 
     def _run_inference(self, image: Image.Image, prompt: str, max_tokens: int = 50) -> Optional[str]:
-        """Exécute une inférence VLM."""
+        # Exécute une inférence VLM.
         try:
             # Sauvegarder image temporairement
             with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as f:
@@ -645,7 +592,7 @@ Réponds avec 3 propositions au format:
             return None
 
     def _parse_identification_response(self, response: str, inference_time: float) -> VLMResult:
-        """Parse la réponse d'identification."""
+        # Parse la réponse d'identification.
         product_name = ""
         brand = ""
         confidence = 0.0
@@ -684,14 +631,13 @@ Réponds avec 3 propositions au format:
         )
 
 
-# =============================================================================
 # MODULE VLM SIMULÉ
-# =============================================================================
 
 class VLMModuleSimulated:
-    """Version simulée du VLM pour tests."""
+    # Version simulée du VLM pour tests.
 
     def __init__(self, product_database: Optional[Dict[str, Any]] = None):
+        # Initialise l'objet.
         self.is_loaded = False
         self.product_database = product_database or {}
 
@@ -705,7 +651,7 @@ class VLMModuleSimulated:
         }
 
     def load_model(self) -> bool:
-        """Simule le chargement."""
+        # Simule le chargement.
         print("[VLM-SIM] Chargement simulé...")
         time.sleep(0.3)
         self.is_loaded = True
@@ -713,12 +659,12 @@ class VLMModuleSimulated:
         return True
 
     def classify_hair_product(self, image: Image.Image) -> Tuple[bool, float]:
-        """Simule la classification."""
+        # Simule la classification.
         time.sleep(0.1)
         return True, 0.95
 
     def identify_product(self, image: Image.Image) -> VLMResult:
-        """Simule l'identification."""
+        # Simule l'identification.
         import random
         time.sleep(random.uniform(0.2, 0.4))
 
@@ -740,7 +686,7 @@ class VLMModuleSimulated:
         )
 
     def identify_with_top3(self, image: Image.Image) -> List[VLMResult]:
-        """Simule Top-3."""
+        # Simule Top-3.
         import random
         time.sleep(random.uniform(0.3, 0.5))
 
@@ -765,17 +711,13 @@ class VLMModuleSimulated:
         return results
 
 
-# =============================================================================
 # PIPELINE COMPLET
-# =============================================================================
 
 class VisionPipeline:
-    """
-    Pipeline complet d'identification visuelle.
-    Combine capture, VLM et code-barres avec arbitrage.
-    """
+    # Pipeline complet d'identification visuelle.
 
     def __init__(
+        # Initialise l'objet.
         self,
         product_database: Dict[str, Any],
         use_simulation: bool = False
@@ -799,7 +741,7 @@ class VisionPipeline:
         self._executor = ThreadPoolExecutor(max_workers=2)
 
     def _build_ean_index(self) -> Dict[str, Dict]:
-        """Construit l'index EAN -> produit."""
+        # Construit l'index EAN -> produit.
         index = {}
         for product in self.product_database.get("products", []):
             ean = product.get("ean13")
@@ -808,19 +750,11 @@ class VisionPipeline:
         return index
 
     def load(self) -> bool:
-        """Charge le modèle VLM."""
+        # Charge le modèle VLM.
         return self.vlm.load_model()
 
     def identify_from_images(self, images: List[Image.Image]) -> IdentificationResult:
-        """
-        Identifie un produit à partir de plusieurs images.
-
-        Args:
-            images: Liste d'images PIL (typiquement 3)
-
-        Returns:
-            IdentificationResult
-        """
+        # Identifie un produit à partir de plusieurs images.
         start_time = time.time()
 
         if not images:
@@ -954,7 +888,7 @@ class VisionPipeline:
         )
 
     def _match_product_by_name(self, name: str) -> Optional[Dict]:
-        """Trouve un produit par son nom (fuzzy matching simple)."""
+        # Trouve un produit par son nom (fuzzy matching simple).
         if not name:
             return None
 
@@ -978,29 +912,20 @@ class VisionPipeline:
         return best_match if best_score > 0.3 else None
 
     def identify_from_paths(self, image_paths: List[str]) -> IdentificationResult:
-        """
-        Identifie à partir de chemins d'images.
-
-        Args:
-            image_paths: Liste de chemins
-
-        Returns:
-            IdentificationResult
-        """
+        # Identifie à partir de chemins d'images.
         images = self.capture.load_images_from_paths(image_paths)
         return self.identify_from_images(images)
 
     def shutdown(self):
-        """Arrête proprement le pipeline."""
+        # Arrête proprement le pipeline.
         self.capture.disconnect()
         self._executor.shutdown(wait=False)
 
 
-# =============================================================================
 # FACTORY
-# =============================================================================
 
 def create_vision_pipeline(
+    # Cree vision pipeline.
     database_path: Optional[str] = None,
     use_simulation: bool = False
 ) -> VisionPipeline:
@@ -1031,9 +956,141 @@ def create_vision_pipeline(
     return VisionPipeline(database, use_simulation=use_simulation)
 
 
-# =============================================================================
+# WRAPPER VISION MODULE (API PUBLIQUE)
+
+class VisionModule:
+    # Wrapper public pour intégration avec l'orchestrateur.
+
+    def __init__(
+        # Initialise l'objet.
+        self,
+        config: Optional[VisionConfig] = None,
+        database_path: Optional[str] = None,
+        use_simulation: Optional[bool] = None
+    ):
+        self.config = config or VisionConfig()
+        self.use_simulation = bool(use_simulation) if use_simulation is not None else False
+
+        # Appliquer les paramètres globaux avant création du pipeline
+        self._apply_globals_from_config()
+
+        self.pipeline = create_vision_pipeline(
+            database_path=database_path,
+            use_simulation=self.use_simulation
+        )
+        self._apply_capture_config()
+
+    def _apply_globals_from_config(self) -> None:
+        # Applique les seuils et le modèle VLM depuis la config.
+        global MODEL_NAME, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_LOW
+
+        if getattr(self.config, "vlm_model", None):
+            MODEL_NAME = self.config.vlm_model
+        if getattr(self.config, "confidence_high", None) is not None:
+            CONFIDENCE_HIGH = self.config.confidence_high
+        if getattr(self.config, "confidence_medium", None) is not None:
+            CONFIDENCE_MEDIUM = self.config.confidence_medium
+        if getattr(self.config, "confidence_low", None) is not None:
+            CONFIDENCE_LOW = self.config.confidence_low
+
+    def _apply_capture_config(self) -> None:
+        # Configure la capture multi-frames depuis la config.
+        capture_cfg = self.pipeline.capture.config
+        if getattr(self.config, "num_frames", None) is not None:
+            capture_cfg.num_frames = self.config.num_frames
+        if getattr(self.config, "capture_interval_ms", None) is not None:
+            capture_cfg.frame_interval_ms = self.config.capture_interval_ms
+
+    def load(self) -> bool:
+        # Charge le modèle VLM (si nécessaire).
+        return self.pipeline.load()
+
+    def identify_product(
+        # Gere product.
+        self,
+        images: Optional[Union[Image.Image, List[Image.Image]]] = None,
+        image_paths: Optional[List[str]] = None
+    ) -> VisionResult:
+        """Identifie un produit à partir d'images ou de chemins."""
+        if images is None and not image_paths:
+            return VisionResult(
+                success=False,
+                confidence_level=ConfidenceLevel.FAILED,
+                message="Aucune image fournie"
+            )
+
+        if isinstance(images, Image.Image):
+            images = [images]
+
+        if not self.pipeline.vlm.is_loaded:
+            if not self.pipeline.load():
+                return VisionResult(
+                    success=False,
+                    confidence_level=ConfidenceLevel.FAILED,
+                    message="Chargement du modèle VLM échoué"
+                )
+
+        if image_paths:
+            raw_result = self.pipeline.identify_from_paths(image_paths)
+        else:
+            raw_result = self.pipeline.identify_from_images(images or [])
+
+        return self._to_vision_result(raw_result)
+
+    def shutdown(self) -> None:
+        # Arrête proprement le pipeline.
+        self.pipeline.shutdown()
+
+    def _to_vision_result(self, result: IdentificationResult) -> VisionResult:
+        # Convertit IdentificationResult vers l'API publique.
+        if not result.success:
+            return VisionResult(
+                success=False,
+                confidence_level=ConfidenceLevel.FAILED,
+                message=result.message,
+                raw_result=result
+            )
+
+        predictions: List[ProductPrediction] = []
+
+        if result.source == IdentificationSource.VLM_MEDIUM:
+            for candidate in result.candidates:
+                predictions.append(ProductPrediction(
+                    product_id=candidate.product_id or None,
+                    name=candidate.name,
+                    brand=candidate.brand,
+                    confidence=candidate.score,
+                    source=candidate.source
+                ))
+            confidence_level = ConfidenceLevel.MEDIUM
+        else:
+            predictions.append(ProductPrediction(
+                product_id=result.product_id or None,
+                name=result.product_name or "",
+                brand=result.brand or "",
+                confidence=result.confidence,
+                source=result.source.value
+            ))
+            if result.source == IdentificationSource.VLM_HIGH:
+                confidence_level = ConfidenceLevel.HIGH
+            elif result.source in (IdentificationSource.BARCODE, IdentificationSource.FALLBACK):
+                confidence_level = ConfidenceLevel.HIGH
+            else:
+                confidence_level = ConfidenceLevel.LOW
+
+        top_prediction = predictions[0] if predictions else None
+
+        return VisionResult(
+            success=True,
+            confidence_level=confidence_level,
+            top_prediction=top_prediction,
+            predictions=predictions,
+            message=result.message,
+            raw_result=result
+        )
+
+
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     print("=" * 70)

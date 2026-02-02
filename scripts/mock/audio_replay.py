@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Replay audio (Programme seul)
-=============================
-Relit un WAV 4 canaux 48kHz et injecte les trames dans le pipeline audio
-(beamforming -> filtrage -> resample). Mesure la sortie 24kHz mono.
-
-Usage:
-    python scripts/mock/audio_replay.py --input data/corpus_audio/test_4ch_48k.wav
-"""
+# Replay audio (Programme seul)
 
 from __future__ import annotations
 
@@ -25,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 def _rms(pcm16: bytes) -> float:
+    # Gere l'action.
     if not pcm16:
         return 0.0
     total = 0
@@ -36,6 +29,7 @@ def _rms(pcm16: bytes) -> float:
 
 
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Replay audio 4ch -> pipeline")
     parser.add_argument("--input", type=str, required=True, help="WAV 4ch 48kHz")
     parser.add_argument("--chunk-frames", type=int, default=1024, help="Frames par chunk")

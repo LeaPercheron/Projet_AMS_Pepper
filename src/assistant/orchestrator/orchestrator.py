@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 9 - Orchestrateur (State Machine)
-=======================================
-Coordonne tous les modules via une machine à états.
-Gestion asynchrone avec asyncio et synchronisation des animations.
-
-États:
-    IDLE → GREETING → AWAITING_INTENT → SCANNING_PRODUCT →
-    CONFIRMING_TOP3 → SCANNING_BARCODE → DISPLAYING_INFO →
-    CONVERSING → ADVISING → ENDING
-
-Usage:
-    from orchestrator import Orchestrator, OrchestratorConfig
-
-    orchestrator = Orchestrator()
-    await orchestrator.run()
-"""
+# Phase 9 - Orchestrateur (State Machine)
 
 import os
 import asyncio
@@ -35,12 +19,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Orchestrator")
 
 
-# =============================================================================
 # ÉTATS DE LA MACHINE
-# =============================================================================
 
 class State(Enum):
-    """États de la machine à états."""
+    # États de la machine à états.
     IDLE = auto()              # En attente, pas de client
     GREETING = auto()          # Salutation du client
     AWAITING_INTENT = auto()   # Attente de l'intention du client
@@ -55,7 +37,7 @@ class State(Enum):
 
 
 class Event(Enum):
-    """Événements déclencheurs de transitions."""
+    # Événements déclencheurs de transitions.
     # Présence
     PERSON_DETECTED = auto()
     PERSON_LEFT = auto()
@@ -90,13 +72,11 @@ class Event(Enum):
     SECURITY_ALERT = auto()
 
 
-# =============================================================================
 # CONFIGURATION
-# =============================================================================
 
 @dataclass
 class OrchestratorConfig:
-    """Configuration de l'orchestrateur."""
+    # Configuration de l'orchestrateur.
     # Timeouts (en secondes)
     idle_timeout: float = 60.0      # Timeout inactivité
     greeting_timeout: float = 10.0   # Timeout salutation
@@ -116,9 +96,7 @@ class OrchestratorConfig:
     log_transitions: bool = True
 
 
-# =============================================================================
 # COULEURS LEDs PAR ÉTAT
-# =============================================================================
 
 LED_COLORS = {
     State.IDLE: (0.0, 0.0, 1.0),        # Bleu - en attente
@@ -135,9 +113,7 @@ LED_COLORS = {
 }
 
 
-# =============================================================================
 # MICRO-PHRASES
-# =============================================================================
 
 MICRO_PHRASES = {
     "looking": [
@@ -187,13 +163,11 @@ MICRO_PHRASES = {
 }
 
 
-# =============================================================================
 # CONTEXTE D'INTERACTION
-# =============================================================================
 
 @dataclass
 class InteractionContext:
-    """Contexte de l'interaction en cours."""
+    # Contexte de l'interaction en cours.
     # Session
     session_id: str = ""
     session_start: float = 0.0
@@ -218,7 +192,7 @@ class InteractionContext:
     security_alert_active: bool = False
 
     def reset(self):
-        """Réinitialise le contexte."""
+        # Réinitialise le contexte.
         self.session_id = ""
         self.session_start = 0.0
         self.person_detected = False
@@ -233,16 +207,13 @@ class InteractionContext:
         self.security_alert_active = False
 
 
-# =============================================================================
 # MACHINE À ÉTATS
-# =============================================================================
 
 class StateMachine:
-    """
-    Machine à états pour l'orchestrateur.
-    """
+    # Machine à états pour l'orchestrateur.
 
     def __init__(self, config: OrchestratorConfig):
+        # Initialise l'objet.
         self.config = config
         self._state = State.IDLE
         self._previous_state = State.IDLE
@@ -259,7 +230,7 @@ class StateMachine:
         self._history: deque = deque(maxlen=50)
 
     def _build_transitions(self) -> Dict[tuple, State]:
-        """Définit toutes les transitions possibles."""
+        # Définit toutes les transitions possibles.
         return {
             # IDLE
             (State.IDLE, Event.PERSON_DETECTED): State.GREETING,
@@ -336,33 +307,25 @@ class StateMachine:
 
     @property
     def state(self) -> State:
-        """État actuel."""
+        # État actuel.
         return self._state
 
     @property
     def previous_state(self) -> State:
-        """État précédent."""
+        # État précédent.
         return self._previous_state
 
     @property
     def time_in_state(self) -> float:
-        """Temps passé dans l'état actuel (secondes)."""
+        # Temps passé dans l'état actuel (secondes).
         return time.time() - self._state_enter_time
 
     def can_transition(self, event: Event) -> bool:
-        """Vérifie si une transition est possible."""
+        # Vérifie si une transition est possible.
         return (self._state, event) in self._transitions
 
     def process_event(self, event: Event) -> bool:
-        """
-        Traite un événement et effectue la transition si possible.
-
-        Args:
-            event: Événement à traiter
-
-        Returns:
-            True si transition effectuée
-        """
+        # Traite un événement et effectue la transition si possible.
         key = (self._state, event)
 
         if key not in self._transitions:
@@ -404,35 +367,32 @@ class StateMachine:
         return True
 
     def on_enter(self, state: State, callback: Callable):
-        """Enregistre un callback d'entrée dans un état."""
+        # Enregistre un callback d'entrée dans un état.
         self._on_enter_callbacks[state].append(callback)
 
     def on_exit(self, state: State, callback: Callable):
-        """Enregistre un callback de sortie d'un état."""
+        # Enregistre un callback de sortie d'un état.
         self._on_exit_callbacks[state].append(callback)
 
     def get_history(self) -> List[Dict]:
-        """Retourne l'historique des transitions."""
+        # Retourne l'historique des transitions.
         return list(self._history)
 
     def reset(self):
-        """Réinitialise la machine à IDLE."""
+        # Réinitialise la machine à IDLE.
         self._previous_state = self._state
         self._state = State.IDLE
         self._state_enter_time = time.time()
         logger.info("State machine reset to IDLE")
 
 
-# =============================================================================
 # ORCHESTRATEUR
-# =============================================================================
 
 class Orchestrator:
-    """
-    Orchestrateur principal coordonnant tous les modules.
-    """
+    # Orchestrateur principal coordonnant tous les modules.
 
     def __init__(self, config: Optional[OrchestratorConfig] = None):
+        # Initialise l'objet.
         self.config = config or OrchestratorConfig()
 
         # Machine à états
@@ -475,7 +435,7 @@ class Orchestrator:
         self._setup_state_callbacks()
 
     def _setup_state_callbacks(self):
-        """Configure les callbacks pour chaque état."""
+        # Configure les callbacks pour chaque état.
         # Entrée dans GREETING
         self.state_machine.on_enter(State.GREETING, self._on_enter_greeting)
 
@@ -494,87 +454,75 @@ class Orchestrator:
         # Sortie de IDLE (début session)
         self.state_machine.on_exit(State.IDLE, self._on_exit_idle)
 
-    # =========================================================================
     # INJECTION MODULES
-    # =========================================================================
 
     def set_audio_module(self, module):
-        """Injecte le module audio."""
+        # Injecte le module audio.
         self._audio_module = module
 
     def set_video_module(self, module):
-        """Injecte le module vidéo."""
+        # Injecte le module vidéo.
         self._video_module = module
 
     def set_vision_module(self, module):
-        """Injecte le module vision."""
+        # Injecte le module vision.
         self._vision_module = module
 
     def set_database_module(self, module):
-        """Injecte le module base de données."""
+        # Injecte le module base de données.
         self._database_module = module
 
     def set_security_module(self, module):
-        """Injecte le module sécurité."""
+        # Injecte le module sécurité.
         self._security_module = module
 
     def set_realtime_client(self, client):
-        """Injecte le client OpenAI Realtime."""
+        # Injecte le client OpenAI Realtime.
         self._realtime_client = client
 
     def set_robot_actions(self, actions):
-        """Injecte les actions robot."""
+        # Injecte les actions robot.
         self._robot_actions = actions
 
-    # =========================================================================
     # CALLBACKS D'ÉTAT
-    # =========================================================================
 
     def _on_exit_idle(self, state: State, event: Event):
-        """Début d'une nouvelle session."""
+        # Début d'une nouvelle session.
         self.context.session_id = f"session_{int(time.time())}"
         self.context.session_start = time.time()
         self._stats["sessions"] += 1
         logger.info(f"Nouvelle session: {self.context.session_id}")
 
     def _on_enter_greeting(self, state: State, event: Event):
-        """Salutation du client."""
+        # Salutation du client.
         asyncio.create_task(self._play_phrase("greeting"))
         asyncio.create_task(self._set_leds(LED_COLORS[State.GREETING]))
 
     def _on_enter_scanning(self, state: State, event: Event):
-        """Début du scan produit."""
+        # Début du scan produit.
         asyncio.create_task(self._play_phrase("looking"))
         asyncio.create_task(self._set_leds(LED_COLORS[State.SCANNING_PRODUCT]))
         self._stats["products_scanned"] += 1
 
     def _on_enter_displaying(self, state: State, event: Event):
-        """Affichage info produit."""
+        # Affichage info produit.
         asyncio.create_task(self._set_leds(LED_COLORS[State.DISPLAYING_INFO]))
 
     def _on_enter_error(self, state: State, event: Event):
-        """Entrée en état d'erreur."""
+        # Entrée en état d'erreur.
         asyncio.create_task(self._play_phrase("error"))
         asyncio.create_task(self._set_leds(LED_COLORS[State.ERROR]))
         self._stats["errors"] += 1
 
     def _on_enter_ending(self, state: State, event: Event):
-        """Fin de l'interaction."""
+        # Fin de l'interaction.
         asyncio.create_task(self._play_phrase("goodbye"))
         asyncio.create_task(self._set_leds(LED_COLORS[State.ENDING]))
 
-    # =========================================================================
     # ACTIONS
-    # =========================================================================
 
     async def _play_phrase(self, category: str, index: int = 0):
-        """
-        Joue une micro-phrase pré-générée.
-
-        Args:
-            category: Catégorie de phrase
-            index: Index dans la catégorie (0 = aléatoire)
-        """
+        # Joue une micro-phrase pré-générée.
         if category not in self._phrases_cache:
             return
 
@@ -592,13 +540,7 @@ class Orchestrator:
         #     await self._robot_actions.say(phrase)
 
     async def _set_leds(self, color: tuple, fade_ms: int = None):
-        """
-        Configure les LEDs avec fade.
-
-        Args:
-            color: Tuple (R, G, B) avec valeurs 0.0-1.0
-            fade_ms: Durée du fade (défaut: config)
-        """
+        # Configure les LEDs avec fade.
         fade_ms = fade_ms or self.config.led_fade_duration_ms
         logger.debug(f"LEDs: RGB{color} (fade {fade_ms}ms)")
 
@@ -606,23 +548,15 @@ class Orchestrator:
         # if self._robot_actions:
         #     await self._robot_actions.fade_leds(color, fade_ms)
 
-    # =========================================================================
     # GESTION ÉVÉNEMENTS
-    # =========================================================================
 
     async def send_event(self, event: Event, data: Dict = None):
-        """
-        Envoie un événement à la machine à états.
-
-        Args:
-            event: Événement à envoyer
-            data: Données associées (optionnel)
-        """
+        # Envoie un événement à la machine à états.
         if self._event_queue:
             await self._event_queue.put((event, data or {}))
 
     def send_event_sync(self, event: Event, data: Dict = None):
-        """Version synchrone de send_event (pour callbacks)."""
+        # Version synchrone de send_event (pour callbacks).
         if self._event_queue:
             try:
                 self._event_queue.put_nowait((event, data or {}))
@@ -630,7 +564,7 @@ class Orchestrator:
                 logger.warning(f"Event queue full, dropping {event.name}")
 
     async def _process_events(self):
-        """Tâche de traitement des événements."""
+        # Tâche de traitement des événements.
         while self._running:
             try:
                 event, data = await asyncio.wait_for(
@@ -655,7 +589,7 @@ class Orchestrator:
                 logger.error(f"Erreur traitement événement: {e}")
 
     def _update_context(self, event: Event, data: Dict):
-        """Met à jour le contexte selon l'événement."""
+        # Met à jour le contexte selon l'événement.
         if event == Event.PERSON_DETECTED:
             self.context.person_detected = True
 
@@ -681,7 +615,7 @@ class Orchestrator:
             self._stats["security_alerts"] += 1
 
     async def _check_timeout(self):
-        """Vérifie les timeouts selon l'état actuel."""
+        # Vérifie les timeouts selon l'état actuel.
         state = self.state_machine.state
         time_in_state = self.state_machine.time_in_state
 
@@ -703,12 +637,10 @@ class Orchestrator:
             logger.info(f"Timeout dans état {state.name} ({time_in_state:.1f}s > {timeout}s)")
             self.state_machine.process_event(Event.TIMEOUT)
 
-    # =========================================================================
     # TÂCHES PARALLÈLES
-    # =========================================================================
 
     async def _monitor_presence(self):
-        """Tâche de monitoring de présence."""
+        # Tâche de monitoring de présence.
         last_presence = False
 
         while self._running:
@@ -731,7 +663,7 @@ class Orchestrator:
                 await asyncio.sleep(1.0)
 
     async def _audio_stream_handler(self):
-        """Tâche de gestion du flux audio."""
+        # Tâche de gestion du flux audio.
         while self._running:
             try:
                 if self._audio_queue:
@@ -749,7 +681,7 @@ class Orchestrator:
                 logger.error(f"Erreur audio_stream: {e}")
 
     async def _video_stream_handler(self):
-        """Tâche de gestion du flux vidéo."""
+        # Tâche de gestion du flux vidéo.
         while self._running:
             try:
                 if self._video_queue:
@@ -766,12 +698,10 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Erreur video_stream: {e}")
 
-    # =========================================================================
     # GESTION ERREURS ET FALLBACKS
-    # =========================================================================
 
     async def _handle_network_error(self):
-        """Gère une erreur réseau."""
+        # Gère une erreur réseau.
         logger.warning("Erreur réseau détectée")
 
         # Passer en mode dégradé
@@ -781,12 +711,12 @@ class Orchestrator:
         # TODO: Tentative de reconnexion
 
     async def _handle_vlm_fallback(self):
-        """Fallback VLM vers code-barres."""
+        # Fallback VLM vers code-barres.
         logger.info("Fallback VLM → code-barres")
         self.state_machine.process_event(Event.VLM_FAILED)
 
     async def _attempt_recovery(self):
-        """Tente une récupération après erreur."""
+        # Tente une récupération après erreur.
         logger.info("Tentative de récupération...")
 
         # Réinitialiser le contexte
@@ -800,12 +730,10 @@ class Orchestrator:
         # Signaler la récupération
         await self.send_event(Event.RECOVERY_COMPLETE)
 
-    # =========================================================================
     # CYCLE DE VIE
-    # =========================================================================
 
     async def start(self):
-        """Démarre l'orchestrateur."""
+        # Démarre l'orchestrateur.
         logger.info("Démarrage de l'orchestrateur...")
 
         self._running = True
@@ -829,7 +757,7 @@ class Orchestrator:
         logger.info("Orchestrateur démarré")
 
     async def stop(self):
-        """Arrête l'orchestrateur."""
+        # Arrête l'orchestrateur.
         logger.info("Arrêt de l'orchestrateur...")
 
         self._running = False
@@ -851,7 +779,7 @@ class Orchestrator:
         logger.info("Orchestrateur arrêté")
 
     async def run(self):
-        """Exécute l'orchestrateur (boucle principale)."""
+        # Exécute l'orchestrateur (boucle principale).
         await self.start()
 
         try:
@@ -864,17 +792,15 @@ class Orchestrator:
         finally:
             await self.stop()
 
-    # =========================================================================
     # API PUBLIQUE
-    # =========================================================================
 
     @property
     def current_state(self) -> State:
-        """État actuel."""
+        # État actuel.
         return self.state_machine.state
 
     def get_stats(self) -> Dict:
-        """Retourne les statistiques."""
+        # Retourne les statistiques.
         return {
             **self._stats,
             "current_state": self.state_machine.state.name,
@@ -883,7 +809,7 @@ class Orchestrator:
         }
 
     def get_context(self) -> Dict:
-        """Retourne le contexte actuel."""
+        # Retourne le contexte actuel.
         return {
             "session_id": self.context.session_id,
             "person_detected": self.context.person_detected,
@@ -894,12 +820,10 @@ class Orchestrator:
         }
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 async def test_orchestrator():
-    """Test de l'orchestrateur."""
+    # Test de l'orchestrateur.
     print("=" * 70)
     print("TEST ORCHESTRATEUR - PHASE 9")
     print("=" * 70)

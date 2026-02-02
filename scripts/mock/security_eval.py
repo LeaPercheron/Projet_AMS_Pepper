@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Evaluation securite (Programme seul)
-====================================
-Simule scenarios medical/medicament et verifie les alertes.
-
-Usage:
-    python scripts/mock/security_eval.py
-"""
+# Evaluation securite (Programme seul)
 
 from __future__ import annotations
 
@@ -19,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 def main() -> int:
+    # Gere l'action.
     try:
         from assistant.safety.security_module import SecurityModule
     except Exception as e:

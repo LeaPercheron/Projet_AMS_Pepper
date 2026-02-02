@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""
-Script de Test Audio Pipeline
-=============================
-Valide le traitement audio sans Pepper physique.
-
-Tests:
-- Resampling 48kHz -> 24kHz
-- Beamforming 4 canaux -> mono
-- Reduction de bruit
-- AGC
-- Half-duplex
-
-Usage:
-    python scripts/test_audio_pipeline.py
-    python scripts/test_audio_pipeline.py --input data/corpus_audio/test.wav
-    python scripts/test_audio_pipeline.py --generate-test-corpus
-    python scripts/test_audio_pipeline.py --test-half-duplex
-"""
+# Script de Test Audio Pipeline
 
 import os
 import sys
@@ -36,7 +19,7 @@ sys.path.insert(0, str(src_path))
 
 @dataclass
 class AudioTestResult:
-    """Resultat d'un test audio."""
+    # Resultat d'un test audio.
     test_name: str
     passed: bool
     message: str = ""
@@ -46,11 +29,10 @@ class AudioTestResult:
 
 
 class AudioPipelineTester:
-    """
-    Testeur du pipeline audio.
-    """
+    # Testeur du pipeline audio.
 
     def __init__(self, verbose: bool = False):
+        # Initialise l'objet.
         self.verbose = verbose
         self.results: List[AudioTestResult] = []
 
@@ -59,7 +41,7 @@ class AudioPipelineTester:
         self.half_duplex = None
 
     def setup(self) -> bool:
-        """Initialise les modules."""
+        # Initialise les modules.
         print("=" * 60)
         print("TEST AUDIO PIPELINE")
         print("=" * 60)
@@ -93,6 +75,7 @@ class AudioPipelineTester:
             return True
 
     def generate_test_signal(
+        # Gere test signal.
         self,
         duration_s: float = 1.0,
         sample_rate: int = 48000,
@@ -133,6 +116,7 @@ class AudioPipelineTester:
             return signal_int16.tobytes()
 
     def generate_noise(
+        # Gere noise.
         self,
         duration_s: float = 1.0,
         sample_rate: int = 48000,
@@ -145,6 +129,7 @@ class AudioPipelineTester:
         return noise_int16.tobytes()
 
     def generate_speech_simulation(
+        # Gere speech simulation.
         self,
         duration_s: float = 2.0,
         sample_rate: int = 48000
@@ -176,12 +161,10 @@ class AudioPipelineTester:
 
         return (signal * 32767).astype(np.int16).tobytes()
 
-    # =========================================================================
     # TESTS
-    # =========================================================================
 
     def test_resampling(self) -> AudioTestResult:
-        """Test du resampling 48kHz -> 24kHz."""
+        # Test du resampling 48kHz -> 24kHz.
         print("\n[TEST] Resampling 48kHz -> 24kHz")
 
         try:
@@ -233,7 +216,7 @@ class AudioPipelineTester:
             )
 
     def test_beamforming(self) -> AudioTestResult:
-        """Test du beamforming 4 canaux -> mono."""
+        # Test du beamforming 4 canaux -> mono.
         print("\n[TEST] Beamforming 4ch -> mono")
 
         try:
@@ -281,7 +264,7 @@ class AudioPipelineTester:
             )
 
     def test_noise_reduction(self) -> AudioTestResult:
-        """Test de la reduction de bruit."""
+        # Test de la reduction de bruit.
         print("\n[TEST] Reduction de bruit")
 
         try:
@@ -342,7 +325,7 @@ class AudioPipelineTester:
             )
 
     def test_agc(self) -> AudioTestResult:
-        """Test de l'AGC (Automatic Gain Control)."""
+        # Test de l'AGC (Automatic Gain Control).
         print("\n[TEST] AGC")
 
         try:
@@ -399,7 +382,7 @@ class AudioPipelineTester:
             )
 
     def test_half_duplex(self) -> AudioTestResult:
-        """Test du mode half-duplex."""
+        # Test du mode half-duplex.
         print("\n[TEST] Half-Duplex")
 
         try:
@@ -465,7 +448,7 @@ class AudioPipelineTester:
             )
 
     def test_full_pipeline(self) -> AudioTestResult:
-        """Test du pipeline complet."""
+        # Test du pipeline complet.
         print("\n[TEST] Pipeline Complet (4ch 48k -> mono 24k)")
 
         try:
@@ -520,12 +503,10 @@ class AudioPipelineTester:
                 message=f"Erreur: {e}"
             )
 
-    # =========================================================================
     # EXECUTION
-    # =========================================================================
 
     def run_all_tests(self) -> bool:
-        """Execute tous les tests."""
+        # Execute tous les tests.
         print("\n" + "=" * 60)
         print("EXECUTION DES TESTS")
         print("=" * 60)
@@ -552,7 +533,7 @@ class AudioPipelineTester:
         return all(r.passed for r in self.results)
 
     def print_summary(self):
-        """Affiche le resume."""
+        # Affiche le resume.
         print("\n" + "=" * 60)
         print("RESUME")
         print("=" * 60)
@@ -571,7 +552,7 @@ class AudioPipelineTester:
                     print(f"  - {r.test_name}: {r.message}")
 
     def generate_test_corpus(self, output_dir: str = "data/corpus_audio"):
-        """Genere un corpus de test."""
+        # Genere un corpus de test.
         print("\n" + "=" * 60)
         print("GENERATION CORPUS DE TEST")
         print("=" * 60)
@@ -613,7 +594,7 @@ class AudioPipelineTester:
             print(f"  - {f}")
 
     def _save_wav(self, path: Path, audio: bytes, sample_rate: int, channels: int):
-        """Sauvegarde un fichier WAV."""
+        # Sauvegarde un fichier WAV.
         with wave.open(str(path), 'wb') as wf:
             wf.setnchannels(channels)
             wf.setsampwidth(2)  # 16-bit
@@ -622,6 +603,7 @@ class AudioPipelineTester:
 
 
 def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Test du pipeline audio")
     parser.add_argument("--verbose", "-v", action="store_true", help="Affichage detaille")
     parser.add_argument("--input", type=str, help="Fichier WAV d'entree")

@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Script d'Evaluation Vision
-==========================
-Teste le pipeline vision sur un dataset de cas de test.
-
-Usage:
-    python scripts/vision_eval.py
-    python scripts/vision_eval.py --case produit_01_klorane
-    python scripts/vision_eval.py --verbose --report reports/vision_eval.json
-    python scripts/vision_eval.py --use-vlm  # Active le VLM reel (lent)
-"""
+# Script d'Evaluation Vision
 
 import os
 import sys
@@ -28,7 +18,7 @@ sys.path.insert(0, str(src_path))
 
 @dataclass
 class TestResult:
-    """Resultat d'un test unitaire."""
+    # Resultat d'un test unitaire.
     case_name: str
     success: bool
 
@@ -59,7 +49,7 @@ class TestResult:
 
 @dataclass
 class EvalReport:
-    """Rapport d'evaluation complet."""
+    # Rapport d'evaluation complet.
     timestamp: str = ""
     total_cases: int = 0
 
@@ -88,11 +78,10 @@ class EvalReport:
 
 
 class VisionEvaluator:
-    """
-    Evaluateur du pipeline vision.
-    """
+    # Evaluateur du pipeline vision.
 
     def __init__(
+        # Initialise l'objet.
         self,
         cases_dir: str = "data/vision_cases",
         use_vlm: bool = False,
@@ -107,7 +96,7 @@ class VisionEvaluator:
         self.barcode_detector = None
 
     def setup(self) -> bool:
-        """Initialise les modules."""
+        # Initialise les modules.
         print("=" * 60)
         print("EVALUATION VISION PIPELINE")
         print("=" * 60)
@@ -152,7 +141,7 @@ class VisionEvaluator:
             return self._setup_standalone()
 
     def _setup_standalone(self) -> bool:
-        """Setup minimal sans le module complet."""
+        # Setup minimal sans le module complet.
         try:
             # Test pyzbar seul
             from pyzbar import pyzbar
@@ -164,7 +153,7 @@ class VisionEvaluator:
             return False
 
     def discover_cases(self) -> List[Path]:
-        """Decouvre les cas de test."""
+        # Decouvre les cas de test.
         cases = []
 
         if not self.cases_dir.exists():
@@ -181,7 +170,7 @@ class VisionEvaluator:
         return cases
 
     def load_case(self, case_dir: Path) -> Optional[Dict]:
-        """Charge un cas de test."""
+        # Charge un cas de test.
         expected_file = case_dir / "expected.json"
 
         try:
@@ -205,7 +194,7 @@ class VisionEvaluator:
             return None
 
     def evaluate_case(self, case: Dict) -> TestResult:
-        """Evalue un cas de test."""
+        # Evalue un cas de test.
         result = TestResult(
             case_name=case["name"],
             success=False,
@@ -240,7 +229,6 @@ class VisionEvaluator:
                 result.error = "Impossible de charger les images"
                 return result
 
-            # === TEST BARCODE ===
             barcode_start = time.time()
             if self.vision_pipeline and hasattr(self.vision_pipeline, 'barcode_detector'):
                 barcode_result = self.vision_pipeline.barcode_detector.detect_in_images(pil_images)
@@ -265,7 +253,6 @@ class VisionEvaluator:
 
             result.barcode_time_ms = (time.time() - barcode_start) * 1000
 
-            # === TEST VLM ===
             vlm_start = time.time()
             if self.vision_pipeline and hasattr(self.vision_pipeline, 'vlm'):
                 # Utiliser le pipeline complet
@@ -289,7 +276,6 @@ class VisionEvaluator:
 
             result.vlm_time_ms = (time.time() - vlm_start) * 1000 if result.vlm_time_ms == 0 else result.vlm_time_ms
 
-            # === EVALUATION ===
             # Barcode match
             if result.barcode_found and result.barcode_ean == expected.get("ean13"):
                 result.success = True
@@ -325,7 +311,7 @@ class VisionEvaluator:
         return result
 
     def run_evaluation(self, case_filter: Optional[str] = None) -> EvalReport:
-        """Execute l'evaluation complete."""
+        # Execute l'evaluation complete.
         report = EvalReport(
             timestamp=datetime.now().isoformat()
         )
@@ -410,7 +396,7 @@ class VisionEvaluator:
         return report
 
     def print_report(self, report: EvalReport):
-        """Affiche le rapport."""
+        # Affiche le rapport.
         print("\n" + "=" * 60)
         print("RAPPORT D'EVALUATION")
         print("=" * 60)
@@ -438,7 +424,7 @@ class VisionEvaluator:
         print("\n" + "=" * 60)
 
     def save_report(self, report: EvalReport, output_path: str):
-        """Sauvegarde le rapport en JSON."""
+        # Sauvegarde le rapport en JSON.
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -449,6 +435,7 @@ class VisionEvaluator:
 
 
 def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Evaluation du pipeline vision")
     parser.add_argument("--case", type=str, help="Filtrer par nom de cas")
     parser.add_argument("--verbose", "-v", action="store_true", help="Affichage detaille")

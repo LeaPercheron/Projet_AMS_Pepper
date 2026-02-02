@@ -1,4 +1,3 @@
-/* ==================== RESET & BASE ==================== */
 * {
     margin: 0;
     padding: 0;
@@ -54,7 +53,6 @@ html, body {
     user-select: none;
 }
 
-/* ==================== SCREENS ==================== */
 .screen {
     position: fixed;
     top: 0;
@@ -73,7 +71,6 @@ html, body {
     opacity: 1;
 }
 
-/* ==================== ÉCRAN ACCUEIL ==================== */
 .home-container {
     display: flex;
     flex-direction: column;
@@ -165,7 +162,6 @@ html, body {
     line-height: 1.5;
 }
 
-/* ==================== ÉCRAN CHOIX SCAN ==================== */
 .scan-choice-container {
     display: flex;
     flex-direction: column;
@@ -234,7 +230,6 @@ html, body {
     color: rgba(255, 255, 255, 0.9);
 }
 
-/* ==================== ÉCRAN SCAN CODE-BARRES ==================== */
 .barcode-container {
     display: flex;
     flex-direction: column;
@@ -313,7 +308,6 @@ html, body {
     width: 100%;
 }
 
-/* ==================== ÉCRAN TOP-3 ==================== */
 .top3-container {
     display: flex;
     flex-direction: column;
@@ -414,7 +408,6 @@ html, body {
     max-width: 450px;
 }
 
-/* ==================== ÉCRAN FICHE PRODUIT ==================== */
 .product-container {
     display: flex;
     flex-direction: column;
@@ -503,7 +496,6 @@ html, body {
     width: 100%;
 }
 
-/* ==================== ÉCRAN CONSEIL GÉNÉRAL ==================== */
 .advice-container {
     display: flex;
     flex-direction: column;
@@ -601,7 +593,6 @@ html, body {
     color: var(--primary-color);
 }
 
-/* ==================== ÉCRAN SÉCURITÉ ==================== */
 .security-container {
     display: flex;
     flex-direction: column;
@@ -635,7 +626,6 @@ html, body {
     margin-bottom: 30px;
 }
 
-/* ==================== ÉCRAN CHARGEMENT ==================== */
 .loading-container {
     display: flex;
     flex-direction: column;
@@ -664,7 +654,6 @@ html, body {
     color: var(--text-secondary);
 }
 
-/* ==================== BOUTONS COMMUNS ==================== */
 .primary-btn {
     width: 100%;
     padding: 18px 30px;
@@ -716,7 +705,6 @@ html, body {
     color: var(--text-primary);
 }
 
-/* ==================== RESPONSIVE ==================== */
 @media (max-width: 600px) {
     .home-title {
         font-size: 2.5rem;
@@ -748,7 +736,6 @@ html, body {
     }
 }
 
-/* ==================== TABLETTE PEPPER (10.1") ==================== */
 @media (min-width: 800px) and (max-width: 1280px) {
     html {
         font-size: 20px;

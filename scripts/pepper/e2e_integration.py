@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Tests Pepper + Programme (E2E)
-==============================
-Lance l'assistant et guide des tests d'integration end-to-end.
-
-Usage:
-    python scripts/pepper/e2e_integration.py --pepper-ip 192.168.1.100
-    python scripts/pepper/e2e_integration.py --pepper-ip 192.168.1.100 --no-launch
-"""
+# Tests Pepper + Programme (E2E)
 
 from __future__ import annotations
 
@@ -32,6 +24,7 @@ class StepResult:
 
 
 def _prompt_step(step_id: str, title: str) -> StepResult:
+    # Gere step.
     print("\n" + "-" * 70)
     print(f"{step_id} - {title}")
     print("Tape: [p]ass, [f]ail, [s]kip, ou un commentaire libre puis Entrée.")
@@ -59,6 +52,7 @@ def _prompt_step(step_id: str, title: str) -> StepResult:
 
 
 def _start_assistant(pepper_ip: str, extra_args: List[str]) -> subprocess.Popen:
+    # Demarre assistant.
     root = Path(__file__).resolve().parents[2]
     env = os.environ.copy()
     src_path = str(root / "src")
@@ -70,6 +64,7 @@ def _start_assistant(pepper_ip: str, extra_args: List[str]) -> subprocess.Popen:
 
 
 def _stop_assistant(proc: subprocess.Popen) -> None:
+    # Arrete assistant.
     if proc.poll() is not None:
         return
     try:
@@ -84,6 +79,7 @@ def _stop_assistant(proc: subprocess.Popen) -> None:
 
 
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Tests Pepper + Programme (E2E)")
     parser.add_argument("--pepper-ip", required=True, help="IP du robot Pepper")
     parser.add_argument("--no-launch", action="store_true", help="N'essaie pas de lancer assistant.main")

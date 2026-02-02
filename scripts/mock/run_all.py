@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Runner Programme seul (B2 -> B7)
-================================
-Enchaine les tests hors Pepper et affiche un resume PASS/FAIL/SKIP.
-"""
+# Runner Programme seul (B2 -> B7)
 
 from __future__ import annotations
 
@@ -14,6 +10,7 @@ from pathlib import Path
 
 
 def _run(label: str, cmd: list[str]) -> tuple[str, int]:
+    # Execute l'action.
     print("\n" + "=" * 70)
     print(f"[RUN] {label}")
     print("=" * 70)
@@ -22,6 +19,7 @@ def _run(label: str, cmd: list[str]) -> tuple[str, int]:
 
 
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Run Programme-only tests (B2-B7)")
     parser.add_argument("--report-dir", type=str, default="reports", help="Dossier rapports")
     parser.add_argument("--vision-cases", type=str, default="data/vision_cases", help="Dataset vision")

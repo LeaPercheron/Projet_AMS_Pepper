@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""
-Point d'Entree Principal - Parapharma Assistant
-================================================
-Lance l'assistant vocal parapharmacie pour robot Pepper.
-
-Usage:
-    # Mode simulation (sans robot)
-    python -m assistant.main --simulation
-
-    # Mode avec Pepper
-    python -m assistant.main --pepper-ip 192.168.1.100
-
-    # Mode production
-    python -m assistant.main --production
-
-    # Afficher l'aide
-    python -m assistant.main --help
-"""
+# Point d'Entree Principal - Parapharma Assistant
 
 import asyncio
 import argparse
@@ -39,20 +22,10 @@ from assistant.logger import SystemLogger, LogEvent, get_logger
 
 
 class PepperAssistant:
-    """
-    Assistant Parapharmacie Robotique - Systeme Integre.
-
-    Coordonne tous les modules:
-    - adapters: Communication avec Pepper (ou simulation)
-    - audio: Capture et traitement audio
-    - realtime: Client OpenAI Realtime API
-    - vision: Identification produits (VLM + code-barres)
-    - database: Base de donnees produits
-    - safety: Filtres de securite
-    - orchestrator: Machine a etats
-    """
+    # Assistant Parapharmacie Robotique - Systeme Integre.
 
     def __init__(self, config: Config):
+        # Initialise l'objet.
         self.config = config
         self.logger = SystemLogger(
             log_directory=config.logging.log_directory,
@@ -76,7 +49,7 @@ class PepperAssistant:
         self._shutdown_event = asyncio.Event()
 
     async def setup(self):
-        """Initialise tous les modules."""
+        # Initialise tous les modules.
         self.logger.log_event(LogEvent.SYSTEM_START, {
             "mode": self.config.mode.value,
             "production": self.config.PRODUCTION_MODE
@@ -84,25 +57,18 @@ class PepperAssistant:
 
         self.logger.log_info(f"Initialisation en mode {self.config.mode.value}...")
 
-        # ==================== ADAPTATEUR ROBOT ====================
         await self._setup_adapter()
 
-        # ==================== BASE DE DONNEES ====================
         await self._setup_database()
 
-        # ==================== SECURITE ====================
         await self._setup_security()
 
-        # ==================== VISION ====================
         await self._setup_vision()
 
-        # ==================== AUDIO / OPENAI ====================
         await self._setup_audio()
 
-        # ==================== TABLETTE ====================
         await self._setup_tablet()
 
-        # ==================== ORCHESTRATEUR ====================
         await self._setup_orchestrator()
 
         self.logger.log_event(LogEvent.CONFIG_LOADED, {
@@ -112,7 +78,7 @@ class PepperAssistant:
         self.logger.log_info("Tous les modules initialises")
 
     async def _setup_adapter(self):
-        """Configure l'adaptateur robot."""
+        # Configure l'adaptateur robot.
         self.logger.log_info("Chargement adaptateur robot...")
 
         try:
@@ -134,7 +100,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement adaptateur", exception=e)
 
     async def _setup_database(self):
-        """Configure le module base de donnees."""
+        # Configure le module base de donnees.
         self.logger.log_info("Chargement base de donnees...")
 
         try:
@@ -154,7 +120,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement database", exception=e)
 
     async def _setup_security(self):
-        """Configure le module securite."""
+        # Configure le module securite.
         self.logger.log_info("Chargement module securite...")
 
         try:
@@ -171,7 +137,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement securite", exception=e)
 
     async def _setup_vision(self):
-        """Configure le module vision."""
+        # Configure le module vision.
         if self.config.mode == RunMode.SIMULATION:
             self.logger.log_info("Vision: mode simulation (desactive)")
             return
@@ -197,7 +163,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement vision", exception=e)
 
     async def _setup_audio(self):
-        """Configure les modules audio (OpenAI + VAD)."""
+        # Configure les modules audio (OpenAI + VAD).
         if self.config.mode == RunMode.SIMULATION:
             self.logger.log_info("Audio: mode simulation")
             return
@@ -225,7 +191,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement audio", exception=e)
 
     async def _setup_tablet(self):
-        """Configure le serveur tablette."""
+        # Configure le serveur tablette.
         self.logger.log_info("Chargement serveur tablette...")
 
         try:
@@ -254,7 +220,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement tablette", exception=e)
 
     async def _setup_orchestrator(self):
-        """Configure l'orchestrateur."""
+        # Configure l'orchestrateur.
         self.logger.log_info("Chargement orchestrateur...")
 
         try:
@@ -288,7 +254,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur chargement orchestrateur", exception=e)
 
     def _get_loaded_modules(self) -> list:
-        """Retourne la liste des modules charges."""
+        # Retourne la liste des modules charges.
         modules = []
         if self.adapter:
             modules.append(f"adapter:{type(self.adapter).__name__}")
@@ -307,7 +273,7 @@ class PepperAssistant:
         return modules
 
     async def run(self):
-        """Lance le systeme complet."""
+        # Lance le systeme complet.
         self._running = True
         session_id = self.logger.start_session()
 
@@ -355,7 +321,7 @@ class PepperAssistant:
             await self.shutdown()
 
     async def _run_tablet_server(self):
-        """Lance le serveur tablette."""
+        # Lance le serveur tablette.
         try:
             self.logger.log_event(LogEvent.TABLET_CONNECTED, {"status": "starting"})
             await self.tablet_server.start()
@@ -363,14 +329,14 @@ class PepperAssistant:
             self.logger.log_error("Erreur serveur tablette", exception=e)
 
     async def _run_orchestrator(self):
-        """Lance l'orchestrateur."""
+        # Lance l'orchestrateur.
         try:
             await self.orchestrator.run()
         except Exception as e:
             self.logger.log_error("Erreur orchestrateur", exception=e)
 
     async def _run_openai_client(self):
-        """Lance le client OpenAI."""
+        # Lance le client OpenAI.
         try:
             if self.openai_client.connect():
                 self.logger.log_info("Client OpenAI connecte")
@@ -381,7 +347,7 @@ class PepperAssistant:
             self.logger.log_error("Erreur client OpenAI", exception=e)
 
     async def shutdown(self):
-        """Arrete proprement le systeme."""
+        # Arrete proprement le systeme.
         if not self._running:
             return
 
@@ -441,15 +407,15 @@ class PepperAssistant:
         self.logger.close()
 
     def request_shutdown(self):
-        """Demande l'arret du systeme."""
+        # Demande l'arret du systeme.
         self._shutdown_event.set()
 
 
-# ==================== POINT D'ENTREE ====================
 
 def setup_signal_handlers(assistant: PepperAssistant):
-    """Configure les handlers de signaux."""
+    # Configure les handlers de signaux.
     def signal_handler(sig, frame):
+        # Gere handler.
         print("\nSignal d'arret recu, arret en cours...")
         assistant.request_shutdown()
 
@@ -458,7 +424,7 @@ def setup_signal_handlers(assistant: PepperAssistant):
 
 
 def parse_args():
-    """Parse les arguments de ligne de commande."""
+    # Parse les arguments de ligne de commande.
     parser = argparse.ArgumentParser(
         description="Assistant Parapharmacie Pepper",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -488,7 +454,7 @@ Exemples:
 
 
 async def main():
-    """Point d'entree principal."""
+    # Point d'entree principal.
     args = parse_args()
 
     # Determiner la configuration
@@ -525,7 +491,7 @@ async def main():
 
 
 def run():
-    """Point d'entree pour le script console."""
+    # Point d'entree pour le script console.
     asyncio.run(main())
 
 

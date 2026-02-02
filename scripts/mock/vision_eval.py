@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Wrapper pour l'evaluation vision (Programme seul)
-==================================================
-Redirige vers scripts/vision_eval.py.
-
-Usage:
-    python scripts/mock/vision_eval.py [args...]
-"""
+# Wrapper pour l'evaluation vision (Programme seul)
 
 from __future__ import annotations
 
@@ -16,6 +9,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    # Gere l'action.
     script = Path(__file__).resolve().parents[1] / "vision_eval.py"
     if not script.exists():
         print(f"[ERREUR] Script introuvable: {script}")

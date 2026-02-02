@@ -1,8 +1,4 @@
-"""
-Adaptateur Robot Pepper
-=======================
-Implementation concrete pour le robot Pepper via NAOqi.
-"""
+# Adaptateur Robot Pepper
 
 import socket
 import struct
@@ -13,14 +9,10 @@ from .base import RobotAdapter, AdapterConfig, LEDColor
 
 
 class PepperAdapter(RobotAdapter):
-    """
-    Adaptateur pour robot Pepper reel.
-
-    Utilise le SDK NAOqi pour communiquer avec le robot.
-    L'audio est transmis via TCP pour minimiser la latence.
-    """
+    # Adaptateur pour robot Pepper reel.
 
     def __init__(
+        # Initialise l'objet.
         self,
         ip: str,
         port: int = 9559,
@@ -56,12 +48,10 @@ class PepperAdapter(RobotAdapter):
         self._audio_callback: Optional[Callable] = None
         self._video_callback: Optional[Callable] = None
 
-    # =====================================================================
     # CONNEXION
-    # =====================================================================
 
     def connect(self) -> bool:
-        """Etablit la connexion avec Pepper."""
+        # Etablit la connexion avec Pepper.
         try:
             import qi
         except ImportError:
@@ -101,7 +91,7 @@ class PepperAdapter(RobotAdapter):
             return False
 
     def disconnect(self):
-        """Ferme la connexion avec Pepper."""
+        # Ferme la connexion avec Pepper.
         self.stop_audio_capture()
         self.stop_audio_playback()
         self.stop_video_stream()
@@ -116,12 +106,10 @@ class PepperAdapter(RobotAdapter):
         self._is_connected = False
         print("[Pepper] Deconnecte")
 
-    # =====================================================================
     # AUDIO
-    # =====================================================================
 
     def start_audio_capture(self, callback: Callable[[bytes], None]) -> bool:
-        """Demarre la capture audio depuis les microphones Pepper."""
+        # Demarre la capture audio depuis les microphones Pepper.
         if not self._is_connected or not self._audio_service:
             return False
 
@@ -154,7 +142,7 @@ class PepperAdapter(RobotAdapter):
         return True
 
     def _audio_capture_loop(self):
-        """Boucle de capture audio."""
+        # Boucle de capture audio.
         try:
             # Creer socket serveur sur Mac
             self._audio_capture_socket = socket.socket(
@@ -208,7 +196,7 @@ class PepperAdapter(RobotAdapter):
                 self._audio_capture_socket.close()
 
     def stop_audio_capture(self):
-        """Arrete la capture audio."""
+        # Arrete la capture audio.
         self._is_capturing = False
 
         if self._audio_service:
@@ -228,7 +216,7 @@ class PepperAdapter(RobotAdapter):
         print("[Pepper] Capture audio arretee")
 
     def play_audio(self, audio_bytes: bytes) -> bool:
-        """Joue de l'audio sur les haut-parleurs Pepper."""
+        # Joue de l'audio sur les haut-parleurs Pepper.
         if not self._is_connected:
             return False
 
@@ -253,7 +241,7 @@ class PepperAdapter(RobotAdapter):
             return False
 
     def stop_audio_playback(self):
-        """Arrete la lecture audio."""
+        # Arrete la lecture audio.
         if self._audio_playback_socket:
             try:
                 self._audio_playback_socket.close()
@@ -261,17 +249,15 @@ class PepperAdapter(RobotAdapter):
                 pass
             self._audio_playback_socket = None
 
-    # =====================================================================
     # LEDs
-    # =====================================================================
 
     def set_led_color(self, color: LEDColor, fade: bool = True):
-        """Change la couleur des LEDs."""
+        # Change la couleur des LEDs.
         r, g, b = color.value
         self.set_led_rgb(r, g, b, fade)
 
     def set_led_rgb(self, r: int, g: int, b: int, fade: bool = True):
-        """Change la couleur des LEDs avec valeurs RGB."""
+        # Change la couleur des LEDs avec valeurs RGB.
         if not self._is_connected or not self._led_service:
             return
 
@@ -292,12 +278,10 @@ class PepperAdapter(RobotAdapter):
         except Exception as e:
             print(f"[Pepper] Erreur LED: {e}")
 
-    # =====================================================================
     # CAMERA
-    # =====================================================================
 
     def capture_image(self) -> Optional[bytes]:
-        """Capture une image depuis la camera."""
+        # Capture une image depuis la camera.
         if not self._is_connected or not self._video_service:
             return None
 
@@ -332,7 +316,7 @@ class PepperAdapter(RobotAdapter):
             return None
 
     def start_video_stream(self, callback: Callable[[bytes], None]) -> bool:
-        """Demarre le flux video."""
+        # Demarre le flux video.
         if not self._is_connected or not self._video_service:
             return False
 
@@ -348,7 +332,7 @@ class PepperAdapter(RobotAdapter):
         return True
 
     def _video_stream_loop(self):
-        """Boucle de capture video."""
+        # Boucle de capture video.
         try:
             video_client = self._video_service.subscribeCamera(
                 "PepperAssistantVideo",
@@ -367,18 +351,16 @@ class PepperAdapter(RobotAdapter):
             print(f"[Pepper] Erreur stream video: {e}")
 
     def stop_video_stream(self):
-        """Arrete le flux video."""
+        # Arrete le flux video.
         self._is_streaming_video = False
         if self._video_thread:
             self._video_thread.join(timeout=2.0)
             self._video_thread = None
 
-    # =====================================================================
     # PAROLE
-    # =====================================================================
 
     def say(self, text: str, blocking: bool = False) -> bool:
-        """Fait parler Pepper."""
+        # Fait parler Pepper.
         if not self._is_connected or not self._tts_service:
             return False
 
@@ -393,19 +375,17 @@ class PepperAdapter(RobotAdapter):
             return False
 
     def stop_speaking(self):
-        """Interrompt la parole."""
+        # Interrompt la parole.
         if self._tts_service:
             try:
                 self._tts_service.stopAll()
             except:
                 pass
 
-    # =====================================================================
     # DETECTION PRESENCE
-    # =====================================================================
 
     def is_person_present(self) -> bool:
-        """Detecte si une personne est presente."""
+        # Detecte si une personne est presente.
         if not self._is_connected or not self._memory_service:
             return False
 
@@ -417,7 +397,7 @@ class PepperAdapter(RobotAdapter):
             return False
 
     def get_person_distance(self) -> Optional[float]:
-        """Estime la distance de la personne."""
+        # Estime la distance de la personne.
         if not self._is_connected or not self._memory_service:
             return None
 
@@ -430,12 +410,10 @@ class PepperAdapter(RobotAdapter):
         except:
             return None
 
-    # =====================================================================
     # TABLETTE
-    # =====================================================================
 
     def show_on_tablet(self, url: str) -> bool:
-        """Affiche une URL sur la tablette."""
+        # Affiche une URL sur la tablette.
         if not self._is_connected or not self._tablet_service:
             return False
 
@@ -447,19 +425,17 @@ class PepperAdapter(RobotAdapter):
             return False
 
     def hide_tablet(self):
-        """Cache le contenu de la tablette."""
+        # Cache le contenu de la tablette.
         if self._tablet_service:
             try:
                 self._tablet_service.hideWebview()
             except:
                 pass
 
-    # =====================================================================
     # MOUVEMENTS
-    # =====================================================================
 
     def wave(self):
-        """Fait un geste de salut."""
+        # Fait un geste de salut.
         if self._motion_service:
             try:
                 # Animation de salut
@@ -473,7 +449,7 @@ class PepperAdapter(RobotAdapter):
                 pass
 
     def nod(self):
-        """Fait un hochement de tete."""
+        # Fait un hochement de tete.
         if self._motion_service:
             try:
                 self._motion_service.post.angleInterpolation(
@@ -486,7 +462,7 @@ class PepperAdapter(RobotAdapter):
                 pass
 
     def point_at_tablet(self):
-        """Pointe vers la tablette."""
+        # Pointe vers la tablette.
         if self._motion_service:
             try:
                 self._motion_service.post.setAngles(
@@ -497,12 +473,10 @@ class PepperAdapter(RobotAdapter):
             except:
                 pass
 
-    # =====================================================================
     # UTILITAIRES
-    # =====================================================================
 
     def get_status(self) -> dict:
-        """Retourne l'etat du robot."""
+        # Retourne l'etat du robot.
         return {
             "type": "pepper",
             "ip": self.ip,

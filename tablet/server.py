@@ -1,14 +1,4 @@
-"""
-Phase 10 - Serveur WebSocket pour Interface Tablette Pepper
-============================================================
-Communication bidirectionnelle entre le Mac M4 Pro et la tablette Pepper.
-
-Usage:
-    python server.py [--port 8765] [--host 0.0.0.0]
-
-Le serveur reçoit les événements de la tablette et envoie les mises à jour
-depuis le pipeline de traitement (vision, audio, sécurité).
-"""
+# Phase 10 - Serveur WebSocket pour Interface Tablette Pepper
 
 import asyncio
 import json
@@ -29,11 +19,10 @@ except ImportError:
     WEBSOCKETS_AVAILABLE = False
     print("⚠️  websockets non installé: pip install websockets")
 
-# ==================== CONFIGURATION ====================
 
 @dataclass
 class ServerConfig:
-    """Configuration du serveur WebSocket."""
+    # Configuration du serveur WebSocket.
     host: str = "0.0.0.0"
     port: int = 8765
     ping_interval: float = 30.0
@@ -42,10 +31,9 @@ class ServerConfig:
     log_level: str = "INFO"
 
 
-# ==================== TYPES DE MESSAGES ====================
 
 class MessageType(Enum):
-    """Types de messages échangés."""
+    # Types de messages échangés.
     # Tablette → Serveur
     COMMAND = "command"
 
@@ -62,7 +50,7 @@ class MessageType(Enum):
 
 
 class TabletCommand(Enum):
-    """Commandes envoyées par la tablette."""
+    # Commandes envoyées par la tablette.
     START_VISUAL_SCAN = "start_visual_scan"
     START_BARCODE_SCAN = "start_barcode_scan"
     CONFIRM_PRODUCT = "confirm_product"
@@ -72,11 +60,10 @@ class TabletCommand(Enum):
     GO_HOME = "go_home"
 
 
-# ==================== STRUCTURES DE DONNÉES ====================
 
 @dataclass
 class Product:
-    """Représentation d'un produit."""
+    # Représentation d'un produit.
     ean: str
     name: str
     brand: str = ""
@@ -86,35 +73,29 @@ class Product:
     image: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
+        # Gere dict.
         return asdict(self)
 
 
 @dataclass
 class Top3Result:
-    """Résultat de classification Top-3."""
+    # Résultat de classification Top-3.
     ean: str
     name: str
     confidence: float
     image: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
+        # Gere dict.
         return asdict(self)
 
 
-# ==================== SERVEUR WEBSOCKET ====================
 
 class TabletServer:
-    """
-    Serveur WebSocket pour la communication avec la tablette Pepper.
-
-    Responsabilités:
-    - Accepter les connexions WebSocket de la tablette
-    - Router les commandes vers les handlers appropriés
-    - Envoyer les mises à jour à la tablette
-    - Gérer les reconnexions
-    """
+    # Serveur WebSocket pour la communication avec la tablette Pepper.
 
     def __init__(self, config: Optional[ServerConfig] = None):
+        # Initialise l'objet.
         self.config = config or ServerConfig()
         self.clients: Set[WebSocketServerProtocol] = set()
         self.handlers: Dict[str, Callable] = {}
@@ -131,7 +112,7 @@ class TabletServer:
         self._register_default_handlers()
 
     def _register_default_handlers(self):
-        """Enregistre les handlers par défaut pour les commandes."""
+        # Enregistre les handlers par défaut pour les commandes.
         self.handlers = {
             TabletCommand.START_VISUAL_SCAN.value: self._handle_visual_scan,
             TabletCommand.START_BARCODE_SCAN.value: self._handle_barcode_scan,
@@ -143,12 +124,12 @@ class TabletServer:
         }
 
     def register_handler(self, command: str, handler: Callable):
-        """Enregistre un handler personnalisé pour une commande."""
+        # Enregistre un handler personnalisé pour une commande.
         self.handlers[command] = handler
         self.logger.info(f"Handler enregistré pour: {command}")
 
     async def start(self):
-        """Démarre le serveur WebSocket."""
+        # Démarre le serveur WebSocket.
         if not WEBSOCKETS_AVAILABLE:
             self.logger.error("websockets non disponible")
             return
@@ -168,7 +149,7 @@ class TabletServer:
             await asyncio.Future()  # Run forever
 
     async def stop(self):
-        """Arrête le serveur."""
+        # Arrête le serveur.
         self.running = False
         # Fermer toutes les connexions
         for client in self.clients:
@@ -177,7 +158,7 @@ class TabletServer:
         self.logger.info("Serveur arrêté")
 
     async def _handle_connection(self, websocket: WebSocketServerProtocol):
-        """Gère une nouvelle connexion WebSocket."""
+        # Gère une nouvelle connexion WebSocket.
         self.clients.add(websocket)
         client_addr = websocket.remote_address
         self.logger.info(f"Nouvelle connexion: {client_addr}")
@@ -202,7 +183,7 @@ class TabletServer:
             self.clients.discard(websocket)
 
     async def _handle_message(self, websocket: WebSocketServerProtocol, raw_message: str):
-        """Traite un message reçu de la tablette."""
+        # Traite un message reçu de la tablette.
         try:
             message = json.loads(raw_message)
             self.logger.debug(f"Message reçu: {message}")
@@ -228,10 +209,9 @@ class TabletServer:
             self.logger.error(f"Erreur traitement message: {e}")
             await self._send_error(websocket, str(e))
 
-    # ==================== HANDLERS PAR DÉFAUT ====================
 
     async def _handle_visual_scan(self, websocket, data: Dict):
-        """Handler pour démarrage du scan visuel."""
+        # Handler pour démarrage du scan visuel.
         self.logger.info("Démarrage scan visuel demandé")
         # Ici, déclencher le pipeline de vision
         # Pour la démo, on simule un résultat après 2s
@@ -245,18 +225,18 @@ class TabletServer:
         ])
 
     async def _handle_barcode_scan(self, websocket, data: Dict):
-        """Handler pour démarrage du scan code-barres."""
+        # Handler pour démarrage du scan code-barres.
         self.logger.info("Démarrage scan code-barres demandé")
         # Ici, activer le scanner code-barres
 
     async def _handle_confirm_product(self, websocket, data: Dict):
-        """Handler pour confirmation d'un produit."""
+        # Handler pour confirmation d'un produit.
         ean = data.get("ean")
         self.logger.info(f"Produit confirmé: {ean}")
         # Ici, enregistrer la confirmation et récupérer les détails
 
     async def _handle_deny_product(self, websocket, data: Dict):
-        """Handler pour refus d'un produit."""
+        # Handler pour refus d'un produit.
         self.logger.info("Produit refusé, passage au scan code-barres")
         await self._send_to_client(websocket, {
             "type": MessageType.SHOW_SCREEN.value,
@@ -264,27 +244,26 @@ class TabletServer:
         })
 
     async def _handle_select_top3(self, websocket, data: Dict):
-        """Handler pour sélection dans le Top-3."""
+        # Handler pour sélection dans le Top-3.
         index = data.get("index", 0)
         self.logger.info(f"Sélection Top-3: index {index}")
 
     async def _handle_get_products(self, websocket, data: Dict):
-        """Handler pour récupération de la liste des produits."""
+        # Handler pour récupération de la liste des produits.
         self.logger.info("Liste des produits demandée")
         # Ici, récupérer depuis la base de données
 
     async def _handle_go_home(self, websocket, data: Dict):
-        """Handler pour retour à l'accueil."""
+        # Handler pour retour à l'accueil.
         self.logger.info("Retour à l'accueil")
         await self._send_to_client(websocket, {
             "type": MessageType.SHOW_SCREEN.value,
             "screen": "home"
         })
 
-    # ==================== MÉTHODES D'ENVOI ====================
 
     async def _send_to_client(self, websocket: WebSocketServerProtocol, message: Dict):
-        """Envoie un message à un client spécifique."""
+        # Envoie un message à un client spécifique.
         try:
             message["timestamp"] = datetime.now().isoformat()
             await websocket.send(json.dumps(message))
@@ -292,14 +271,14 @@ class TabletServer:
             self.logger.error(f"Erreur envoi: {e}")
 
     async def _send_error(self, websocket: WebSocketServerProtocol, message: str):
-        """Envoie un message d'erreur."""
+        # Envoie un message d'erreur.
         await self._send_to_client(websocket, {
             "type": MessageType.ERROR.value,
             "message": message
         })
 
     async def broadcast(self, message: Dict):
-        """Envoie un message à tous les clients connectés."""
+        # Envoie un message à tous les clients connectés.
         message["timestamp"] = datetime.now().isoformat()
         data = json.dumps(message)
 
@@ -309,10 +288,9 @@ class TabletServer:
             except Exception as e:
                 self.logger.error(f"Erreur broadcast: {e}")
 
-    # ==================== MÉTHODES PUBLIQUES ====================
 
     async def send_product_identified(self, websocket_or_broadcast, product: Product):
-        """Envoie les informations d'un produit identifié."""
+        # Envoie les informations d'un produit identifié.
         message = {
             "type": MessageType.PRODUCT_IDENTIFIED.value,
             "product": product.to_dict()
@@ -324,7 +302,7 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
     async def send_top3_results(self, websocket_or_broadcast, results: list):
-        """Envoie les résultats Top-3."""
+        # Envoie les résultats Top-3.
         message = {
             "type": MessageType.TOP3_RESULTS.value,
             "results": [r.to_dict() if isinstance(r, Top3Result) else r for r in results]
@@ -336,7 +314,7 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
     async def send_barcode_detected(self, websocket_or_broadcast, ean: str, product: Optional[Product] = None):
-        """Envoie la notification de code-barres détecté."""
+        # Envoie la notification de code-barres détecté.
         message = {
             "type": MessageType.BARCODE_DETECTED.value,
             "ean": ean,
@@ -349,7 +327,7 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
     async def send_barcode_failed(self, websocket_or_broadcast):
-        """Envoie la notification d'échec de scan code-barres."""
+        # Envoie la notification d'échec de scan code-barres.
         message = {
             "type": MessageType.BARCODE_FAILED.value
         }
@@ -360,7 +338,7 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
     async def send_security_alert(self, websocket_or_broadcast, title: str, alert_message: str):
-        """Envoie une alerte de sécurité."""
+        # Envoie une alerte de sécurité.
         message = {
             "type": MessageType.SECURITY_ALERT.value,
             "title": title,
@@ -373,7 +351,7 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
     async def send_show_screen(self, websocket_or_broadcast, screen: str):
-        """Envoie une commande pour afficher un écran."""
+        # Envoie une commande pour afficher un écran.
         message = {
             "type": MessageType.SHOW_SCREEN.value,
             "screen": screen
@@ -385,7 +363,7 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
     async def send_products_list(self, websocket_or_broadcast, products: list):
-        """Envoie la liste des produits."""
+        # Envoie la liste des produits.
         message = {
             "type": MessageType.PRODUCTS_LIST.value,
             "products": [p.to_dict() if isinstance(p, Product) else p for p in products]
@@ -397,44 +375,38 @@ class TabletServer:
             await self._send_to_client(websocket_or_broadcast, message)
 
 
-# ==================== INTÉGRATION AVEC L'ORCHESTRATEUR ====================
 
 class TabletBridge:
-    """
-    Pont entre l'orchestrateur et la tablette.
-
-    Permet à l'orchestrateur d'envoyer des messages à la tablette
-    sans connaître les détails du protocole WebSocket.
-    """
+    # Pont entre l'orchestrateur et la tablette.
 
     def __init__(self, server: TabletServer):
+        # Initialise l'objet.
         self.server = server
 
     async def show_product(self, product: Product):
-        """Affiche un produit sur la tablette."""
+        # Affiche un produit sur la tablette.
         await self.server.send_product_identified(True, product)
 
     async def show_top3(self, results: list):
-        """Affiche les résultats Top-3 sur la tablette."""
+        # Affiche les résultats Top-3 sur la tablette.
         await self.server.send_top3_results(True, results)
 
     async def show_security_alert(self, title: str, message: str):
-        """Affiche une alerte de sécurité sur la tablette."""
+        # Affiche une alerte de sécurité sur la tablette.
         await self.server.send_security_alert(True, title, message)
 
     async def show_screen(self, screen: str):
-        """Change l'écran affiché sur la tablette."""
+        # Change l'écran affiché sur la tablette.
         await self.server.send_show_screen(True, screen)
 
     async def notify_barcode(self, ean: str, product: Optional[Product] = None):
-        """Notifie la détection d'un code-barres."""
+        # Notifie la détection d'un code-barres.
         await self.server.send_barcode_detected(True, ean, product)
 
 
-# ==================== TEST ====================
 
 async def test_server():
-    """Test du serveur WebSocket."""
+    # Test du serveur WebSocket.
     print("=" * 60)
     print("TEST SERVEUR WEBSOCKET TABLETTE")
     print("=" * 60)

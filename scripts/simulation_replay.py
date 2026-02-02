@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""
-Simulation Replay Mode
-======================
-Execute un cycle complet du systeme avec des entrees deterministes.
-
-Usage:
-    # Cycle complet par defaut
-    python scripts/simulation_replay.py
-
-    # Avec scenario personnalise
-    python scripts/simulation_replay.py --scenario data/scenarios/happy_path.json
-
-    # Replay vision
-    python scripts/simulation_replay.py --replay-vision data/vision_cases/produit_01
-
-    # Replay audio
-    python scripts/simulation_replay.py --replay-audio data/corpus_audio/speech_clean.wav
-
-    # Test tablette WebSocket
-    python scripts/simulation_replay.py --test-websocket
-"""
+# Simulation Replay Mode
 
 import os
 import sys
@@ -38,12 +18,10 @@ src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
 
-# =============================================================================
 # SCENARIOS
-# =============================================================================
 
 class ScenarioStep(Enum):
-    """Types d'etapes de scenario."""
+    # Types d'etapes de scenario.
     PERSON_DETECTED = "person_detected"
     SPEECH = "speech"
     SHOW_PRODUCT = "show_product"
@@ -61,7 +39,7 @@ class ScenarioStep(Enum):
 
 @dataclass
 class Scenario:
-    """Definition d'un scenario de test."""
+    # Definition d'un scenario de test.
     name: str
     description: str
     steps: List[Dict] = field(default_factory=list)
@@ -170,13 +148,11 @@ SCENARIOS = {
 }
 
 
-# =============================================================================
 # SIMULATEUR
-# =============================================================================
 
 @dataclass
 class SimulationResult:
-    """Resultat de simulation."""
+    # Resultat de simulation.
     scenario_name: str
     success: bool
     steps_executed: int
@@ -187,17 +163,16 @@ class SimulationResult:
 
 
 class ReplaySimulator:
-    """
-    Simulateur de replay pour tests deterministes.
-    """
+    # Simulateur de replay pour tests deterministes.
 
     def __init__(self, verbose: bool = False):
+        # Initialise l'objet.
         self.verbose = verbose
         self.orchestrator = None
         self.results: List[SimulationResult] = []
 
     async def setup(self) -> bool:
-        """Initialise le simulateur."""
+        # Initialise le simulateur.
         print("=" * 60)
         print("SIMULATION REPLAY")
         print("=" * 60)
@@ -231,7 +206,7 @@ class ReplaySimulator:
             return False
 
     async def run_scenario(self, scenario: Scenario) -> SimulationResult:
-        """Execute un scenario."""
+        # Execute un scenario.
         print(f"\n{'='*60}")
         print(f"SCENARIO: {scenario.name}")
         print(f"Description: {scenario.description}")
@@ -293,7 +268,7 @@ class ReplaySimulator:
         return result
 
     async def _execute_step(self, step: Dict) -> bool:
-        """Execute une etape du scenario."""
+        # Execute une etape du scenario.
         step_type = step.get("type", "")
 
         try:
@@ -402,7 +377,7 @@ class ReplaySimulator:
             return False
 
     async def run_all_scenarios(self) -> bool:
-        """Execute tous les scenarios predefinis."""
+        # Execute tous les scenarios predefinis.
         all_passed = True
 
         for name, scenario in SCENARIOS.items():
@@ -415,7 +390,7 @@ class ReplaySimulator:
         return all_passed
 
     def print_summary(self):
-        """Affiche le resume."""
+        # Affiche le resume.
         print("\n" + "=" * 60)
         print("RESUME DES SCENARIOS")
         print("=" * 60)
@@ -438,12 +413,10 @@ class ReplaySimulator:
         print("\n" + "=" * 60)
 
 
-# =============================================================================
 # TEST WEBSOCKET
-# =============================================================================
 
 async def test_websocket():
-    """Teste la connexion WebSocket tablette."""
+    # Teste la connexion WebSocket tablette.
     print("=" * 60)
     print("TEST WEBSOCKET TABLETTE")
     print("=" * 60)
@@ -486,11 +459,10 @@ async def test_websocket():
         print(f"[ERREUR] {e}")
 
 
-# =============================================================================
 # MAIN
-# =============================================================================
 
 async def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Simulation replay")
     parser.add_argument("--verbose", "-v", action="store_true", help="Affichage detaille")
     parser.add_argument("--scenario", type=str, help="Scenario specifique a executer")

@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Verification DB produits (Programme seul)
-=========================================
-Verifie la presence des 30 produits et l'integrite des champs essentiels.
-
-Usage:
-    python scripts/mock/db_check.py --db data/products.db
-"""
+# Verification DB produits (Programme seul)
 
 from __future__ import annotations
 
@@ -17,6 +10,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Check DB produits")
     parser.add_argument("--db", type=str, default="data/products.db", help="Chemin SQLite")
     args = parser.parse_args()

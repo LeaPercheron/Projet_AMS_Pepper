@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Test Module Vision
-==================
-Teste le pipeline d'identification de produits.
-
-Usage:
-    python scripts/test_vision.py
-    python scripts/test_vision.py --image path/to/image.jpg
-"""
+# Test Module Vision
 
 import sys
 import argparse
@@ -18,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def test_vision_import():
-    """Teste l'import du module vision."""
+    # Teste l'import du module vision.
     print("=" * 60)
     print("TEST IMPORT MODULE VISION")
     print("=" * 60)
@@ -39,7 +31,7 @@ def test_vision_import():
 
 
 def test_vision_config():
-    """Teste la configuration vision."""
+    # Teste la configuration vision.
     print("\n" + "=" * 60)
     print("TEST CONFIGURATION VISION")
     print("=" * 60)
@@ -59,7 +51,7 @@ def test_vision_config():
 
 
 def test_barcode_detection():
-    """Teste la detection de code-barres."""
+    # Teste la detection de code-barres.
     print("\n" + "=" * 60)
     print("TEST DETECTION CODE-BARRES")
     print("=" * 60)
@@ -87,6 +79,7 @@ def test_barcode_detection():
 
 
 def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Test module vision")
     parser.add_argument("--image", type=str, help="Image a analyser")
     parser.add_argument("--load-vlm", action="store_true",

@@ -2,39 +2,37 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assistant Parapharmacie - Pepper</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- ==================== ÉCRAN ACCUEIL ==================== -->
     <div id="screen-home" class="screen active">
         <div class="home-container">
-            <h1 class="home-title">Bonjour ! 👋</h1>
+            <h1 class="home-title">Bonjour !</h1>
             <p class="home-subtitle">Comment puis-je vous aider ?</p>
 
             <div class="home-buttons">
                 <button class="home-btn home-btn-product" onclick="App.showScreen('scan-choice')">
-                    <span class="btn-icon">📦</span>
+                    <span class="btn-icon"></span>
                     <span class="btn-text">PRODUIT</span>
                     <span class="btn-desc">Identifier un produit</span>
                 </button>
 
                 <button class="home-btn home-btn-question" onclick="App.showScreen('advice')">
-                    <span class="btn-icon">💬</span>
+                    <span class="btn-icon"></span>
                     <span class="btn-text">QUESTION GÉNÉRALE</span>
                     <span class="btn-desc">Conseils capillaires</span>
                 </button>
             </div>
 
             <div class="rgpd-notice">
-                <p>🔒 Aucune donnée personnelle n'est collectée ni stockée.<br>
+                <p>Aucune donnée personnelle n'est collectée ni stockée.<br>
                 Les échanges vocaux sont traités en temps réel et ne sont pas enregistrés.</p>
             </div>
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN CHOIX SCAN ==================== -->
     <div id="screen-scan-choice" class="screen">
         <div class="scan-choice-container">
             <h2>Comment souhaitez-vous identifier le produit ?</h2>
@@ -47,7 +45,7 @@
                 </button>
 
                 <button class="scan-choice-btn" onclick="App.showScreen('barcode-scan')">
-                    <span class="btn-icon">📊</span>
+                    <span class="btn-icon"></span>
                     <span class="btn-text">Scanner le code-barres</span>
                     <span class="btn-desc">Je présente le code-barres</span>
                 </button>
@@ -59,7 +57,6 @@
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN SCAN CODE-BARRES ==================== -->
     <div id="screen-barcode-scan" class="screen">
         <div class="barcode-container">
             <h2>Scan du code-barres</h2>
@@ -87,7 +84,6 @@
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN TOP-3 ==================== -->
     <div id="screen-top3" class="screen">
         <div class="top3-container">
             <h2>Est-ce l'un de ces produits ?</h2>
@@ -108,7 +104,6 @@
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN FICHE PRODUIT ==================== -->
     <div id="screen-product" class="screen">
         <div class="product-container">
             <div class="product-card">
@@ -137,7 +132,7 @@
 
             <div class="product-buttons">
                 <button class="primary-btn" onclick="App.showScreen('scan-choice')">
-                    📦 Nouveau produit
+                    Nouveau produit
                 </button>
                 <button class="back-btn" onclick="App.showScreen('home')">
                     ← Retour à l'accueil
@@ -146,7 +141,6 @@
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN CONSEIL GÉNÉRAL ==================== -->
     <div id="screen-advice" class="screen">
         <div class="advice-container">
             <h2>Conseils capillaires</h2>
@@ -185,10 +179,9 @@
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN ERREUR/SÉCURITÉ ==================== -->
     <div id="screen-security" class="screen">
         <div class="security-container">
-            <div class="security-icon">⚠️</div>
+            <div class="security-icon"></div>
             <h2 id="security-title">Information importante</h2>
             <p id="security-message" class="security-message">Message de sécurité...</p>
 
@@ -198,7 +191,6 @@
         </div>
     </div>
 
-    <!-- ==================== ÉCRAN CHARGEMENT ==================== -->
     <div id="screen-loading" class="screen">
         <div class="loading-container">
             <div class="loading-spinner"></div>

@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""
-Test Module Audio
-=================
-Teste le pipeline de traitement audio.
-
-Usage:
-    python scripts/test_audio.py
-    python scripts/test_audio.py --preset noisy_room
-    python scripts/test_audio.py --with-file input.wav
-"""
+# Test Module Audio
 
 import sys
 import argparse
@@ -30,7 +21,7 @@ from assistant.audio import (
 
 
 def test_audio_processing():
-    """Teste le traitement audio avec signal synthetique."""
+    # Teste le traitement audio avec signal synthetique.
     import numpy as np
 
     print("=" * 60)
@@ -92,7 +83,7 @@ def test_audio_processing():
 
 
 def test_presets():
-    """Teste les differents presets audio."""
+    # Teste les differents presets audio.
     print("\n" + "=" * 60)
     print("TEST PRESETS")
     print("=" * 60)
@@ -112,7 +103,7 @@ def test_presets():
 
 
 def test_half_duplex():
-    """Teste le gestionnaire half-duplex."""
+    # Teste le gestionnaire half-duplex.
     print("\n" + "=" * 60)
     print("TEST HALF-DUPLEX")
     print("=" * 60)
@@ -125,6 +116,7 @@ def test_half_duplex():
 
     # Callback
     def on_state_change(state):
+        # Gere state change.
         print(f"  -> Callback: {state.value}")
 
     manager.register_callback(on_state_change)
@@ -161,6 +153,7 @@ def test_half_duplex():
 
 
 def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Test module audio")
     parser.add_argument("--preset", type=str, default="default",
                         help="Preset audio a utiliser")

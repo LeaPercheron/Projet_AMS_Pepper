@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Smoke test UI tablette (Programme seul)
-=======================================
-Demarre le serveur WebSocket, connecte un client,
-envoie une commande et verifie la reception d'un message.
-"""
+# Smoke test UI tablette (Programme seul)
 
 from __future__ import annotations
 
@@ -21,6 +16,7 @@ sys.path.insert(0, str(ROOT / "tablet"))
 
 
 async def _run(port: int) -> int:
+    # Execute l'action.
     try:
         import websockets
     except Exception:
@@ -76,6 +72,7 @@ async def _run(port: int) -> int:
 
 
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Smoke test UI tablette")
     parser.add_argument("--port", type=int, default=8765, help="Port WS")
     args = parser.parse_args()

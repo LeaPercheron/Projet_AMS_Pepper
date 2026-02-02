@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 2 - Module de Traitement Audio Entrée
-===========================================
-Améliore la qualité de capture pour environnement bruité.
-
-Fonctionnalités:
-1. Beamforming directionnel (4 canaux → mono orienté avant)
-2. Réduction de bruit modérée (préserve voix naturelle)
-3. Contrôle de gain automatique (AGC)
-4. Conversion format OpenAI (48kHz → 24kHz, PCM16)
-
-Microphones Pepper (vue de dessus):
-    [Front - Canal 0]
-           ^
-           |
-    [Left] | [Right]
-    Ch.2   |   Ch.3
-           |
-    [Rear - Canal 1]
-
-Usage:
-    from audio_processing import AudioProcessor
-    processor = AudioProcessor()
-    mono_24k = processor.process(raw_4ch_48k)
-"""
+# Phase 2 - Module de Traitement Audio Entrée
 
 import numpy as np
 from typing import Optional, Tuple, Dict, Any
@@ -36,13 +12,11 @@ import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
-# =============================================================================
 # CONFIGURATION
-# =============================================================================
 
 @dataclass
 class AudioConfig:
-    """Configuration audio pour Pepper et OpenAI."""
+    # Configuration audio pour Pepper et OpenAI.
 
     # Entrée Pepper
     input_sample_rate: int = 48000
@@ -83,23 +57,19 @@ class AudioConfig:
 
 
 class BeamformingMode(Enum):
-    """Modes de beamforming disponibles."""
+    # Modes de beamforming disponibles.
     WEIGHTED_SUM = "weighted_sum"      # Somme pondérée simple
     DELAY_AND_SUM = "delay_and_sum"    # Avec compensation de délai
     ADAPTIVE = "adaptive"              # Adaptatif selon énergie
 
 
-# =============================================================================
 # BEAMFORMING
-# =============================================================================
 
 class Beamformer:
-    """
-    Beamforming directionnel pour microphones Pepper.
-    Combine les 4 canaux en privilégiant la source frontale.
-    """
+    # Beamforming directionnel pour microphones Pepper.
 
     def __init__(self, config: AudioConfig):
+        # Initialise l'objet.
         self.config = config
 
         # Poids normalisés
@@ -117,6 +87,7 @@ class Beamformer:
         self._max_history = 50
 
     def process(self, audio_4ch: np.ndarray,
+                # Traite l'action.
                 mode: BeamformingMode = BeamformingMode.WEIGHTED_SUM) -> np.ndarray:
         """
         Applique le beamforming sur l'audio 4 canaux.
@@ -142,7 +113,7 @@ class Beamformer:
             return self._weighted_sum(audio_4ch)
 
     def _weighted_sum(self, audio_4ch: np.ndarray) -> np.ndarray:
-        """Beamforming par somme pondérée simple."""
+        # Beamforming par somme pondérée simple.
         # audio_4ch shape: (samples, 4)
         mono = np.zeros(audio_4ch.shape[0], dtype=np.float64)
 
@@ -152,10 +123,7 @@ class Beamformer:
         return mono
 
     def _delay_and_sum(self, audio_4ch: np.ndarray) -> np.ndarray:
-        """
-        Beamforming avec compensation de délai.
-        Les micros latéraux ont un léger délai par rapport au front.
-        """
+        # Beamforming avec compensation de délai.
         # Distance entre micros Pepper ~10cm
         # Vitesse du son ~343 m/s
         # Délai max ~0.3ms = ~14 samples à 48kHz
@@ -179,10 +147,7 @@ class Beamformer:
         return mono
 
     def _adaptive(self, audio_4ch: np.ndarray) -> np.ndarray:
-        """
-        Beamforming adaptatif basé sur l'énergie.
-        Augmente le poids du canal avec le plus de signal.
-        """
+        # Beamforming adaptatif basé sur l'énergie.
         # Calculer l'énergie par canal
         energies = np.array([np.sum(audio_4ch[:, ch]**2) for ch in range(4)])
 
@@ -204,34 +169,24 @@ class Beamformer:
         return mono
 
     def _deinterleave(self, interleaved: np.ndarray, channels: int) -> np.ndarray:
-        """Convertit audio interleaved en (samples, channels)."""
+        # Convertit audio interleaved en (samples, channels).
         samples_per_channel = len(interleaved) // channels
         return interleaved.reshape(samples_per_channel, channels)
 
 
-# =============================================================================
 # RÉDUCTION DE BRUIT
-# =============================================================================
 
 class NoiseReducer:
-    """
-    Réduction de bruit modérée préservant la voix naturelle.
-    Utilise spectral gating (soustraction spectrale simplifiée).
-    """
+    # Réduction de bruit modérée préservant la voix naturelle.
 
     def __init__(self, config: AudioConfig):
+        # Initialise l'objet.
         self.config = config
         self.noise_profile: Optional[np.ndarray] = None
         self._noise_frames = []
 
     def estimate_noise(self, audio: np.ndarray, duration_ms: float = 100):
-        """
-        Estime le profil de bruit depuis un segment silencieux.
-
-        Args:
-            audio: Segment audio (supposé être du bruit)
-            duration_ms: Durée à utiliser pour l'estimation
-        """
+        # Estime le profil de bruit depuis un segment silencieux.
         samples = int(self.config.input_sample_rate * duration_ms / 1000)
         samples = min(samples, len(audio))
 
@@ -249,15 +204,7 @@ class NoiseReducer:
             self.noise_profile = np.mean(noise_spectra, axis=0)
 
     def process(self, audio: np.ndarray) -> np.ndarray:
-        """
-        Applique la réduction de bruit.
-
-        Args:
-            audio: Signal audio mono
-
-        Returns:
-            Signal débruité
-        """
+        # Applique la réduction de bruit.
         if not self.config.noise_reduction_enabled:
             return audio
 
@@ -312,7 +259,7 @@ class NoiseReducer:
         return output
 
     def _estimate_from_signal(self, audio: np.ndarray):
-        """Estime le bruit depuis les segments les plus faibles du signal."""
+        # Estime le bruit depuis les segments les plus faibles du signal.
         window_size = 1024
         hop_size = 512
 
@@ -340,17 +287,13 @@ class NoiseReducer:
             self.noise_profile = np.mean(noise_spectra, axis=0)
 
 
-# =============================================================================
 # CONTRÔLE DE GAIN (AGC)
-# =============================================================================
 
 class AutomaticGainControl:
-    """
-    Contrôle automatique du gain pour normaliser le volume.
-    Évite saturation et sous-volume.
-    """
+    # Contrôle automatique du gain pour normaliser le volume.
 
     def __init__(self, config: AudioConfig):
+        # Initialise l'objet.
         self.config = config
 
         # Constantes de temps
@@ -368,15 +311,7 @@ class AutomaticGainControl:
         self.min_gain = 10 ** (config.min_gain_db / 20)
 
     def process(self, audio: np.ndarray) -> np.ndarray:
-        """
-        Applique le contrôle de gain automatique.
-
-        Args:
-            audio: Signal audio mono
-
-        Returns:
-            Signal avec gain normalisé
-        """
+        # Applique le contrôle de gain automatique.
         if not self.config.agc_enabled:
             return audio
 
@@ -413,24 +348,23 @@ class AutomaticGainControl:
         return output
 
     def reset(self):
-        """Réinitialise l'état de l'AGC."""
+        # Réinitialise l'état de l'AGC.
         self.current_gain_db = 0.0
         self.envelope = 0.0
 
 
-# =============================================================================
 # LIMITEUR
-# =============================================================================
 
 class SoftLimiter:
-    """Limiteur doux pour éviter la saturation."""
+    # Limiteur doux pour éviter la saturation.
 
     def __init__(self, config: AudioConfig):
+        # Initialise l'objet.
         self.config = config
         self.threshold = config.limiter_threshold
 
     def process(self, audio: np.ndarray) -> np.ndarray:
-        """Applique une limitation douce (soft clipping)."""
+        # Applique une limitation douce (soft clipping).
         if not self.config.limiter_enabled:
             return audio
 
@@ -442,14 +376,13 @@ class SoftLimiter:
         return limited
 
 
-# =============================================================================
 # FILTRE PASSE-HAUT
-# =============================================================================
 
 class HighPassFilter:
-    """Filtre passe-haut pour supprimer DC offset et basses fréquences."""
+    # Filtre passe-haut pour supprimer DC offset et basses fréquences.
 
     def __init__(self, config: AudioConfig):
+        # Initialise l'objet.
         self.config = config
 
         # Coefficient du filtre IIR simple
@@ -465,7 +398,7 @@ class HighPassFilter:
         self.prev_output = 0.0
 
     def process(self, audio: np.ndarray) -> np.ndarray:
-        """Applique le filtre passe-haut."""
+        # Applique le filtre passe-haut.
         if not self.config.highpass_enabled:
             return audio
 
@@ -479,33 +412,24 @@ class HighPassFilter:
         return output
 
     def reset(self):
-        """Réinitialise l'état du filtre."""
+        # Réinitialise l'état du filtre.
         self.prev_input = 0.0
         self.prev_output = 0.0
 
 
-# =============================================================================
 # RESAMPLER
-# =============================================================================
 
 class Resampler:
-    """Conversion de fréquence d'échantillonnage."""
+    # Conversion de fréquence d'échantillonnage.
 
     def __init__(self, input_rate: int, output_rate: int):
+        # Initialise l'objet.
         self.input_rate = input_rate
         self.output_rate = output_rate
         self.ratio = output_rate / input_rate
 
     def process(self, audio: np.ndarray) -> np.ndarray:
-        """
-        Resample l'audio.
-
-        Args:
-            audio: Signal à la fréquence d'entrée
-
-        Returns:
-            Signal à la fréquence de sortie
-        """
+        # Resample l'audio.
         if self.input_rate == self.output_rate:
             return audio
 
@@ -520,7 +444,7 @@ class Resampler:
             return self._linear_resample(audio)
 
     def _linear_resample(self, audio: np.ndarray) -> np.ndarray:
-        """Resampling par interpolation linéaire."""
+        # Resampling par interpolation linéaire.
         num_output_samples = int(len(audio) * self.ratio)
         output = np.zeros(num_output_samples)
 
@@ -538,13 +462,11 @@ class Resampler:
         return output
 
 
-# =============================================================================
 # PROCESSEUR PRINCIPAL
-# =============================================================================
 
 @dataclass
 class ProcessingStats:
-    """Statistiques de traitement."""
+    # Statistiques de traitement.
     input_samples: int = 0
     output_samples: int = 0
     input_level_db: float = 0.0
@@ -555,21 +477,10 @@ class ProcessingStats:
 
 
 class AudioProcessor:
-    """
-    Processeur audio principal combinant tous les traitements.
-
-    Pipeline:
-    1. Décodage PCM16 → float
-    2. Beamforming 4ch → mono
-    3. Filtre passe-haut
-    4. Réduction de bruit
-    5. Contrôle de gain (AGC)
-    6. Limiteur
-    7. Resampling 48kHz → 24kHz
-    8. Encodage float → PCM16
-    """
+    # Processeur audio principal combinant tous les traitements.
 
     def __init__(self, config: Optional[AudioConfig] = None):
+        # Initialise l'objet.
         self.config = config or AudioConfig()
 
         # Initialiser les modules
@@ -587,6 +498,7 @@ class AudioProcessor:
         self.stats = ProcessingStats()
 
     def process(self, audio_bytes: bytes,
+                # Traite l'action.
                 beamforming_mode: BeamformingMode = BeamformingMode.WEIGHTED_SUM
                 ) -> bytes:
         """
@@ -644,6 +556,7 @@ class AudioProcessor:
         return output_bytes
 
     def process_numpy(self, audio_4ch: np.ndarray,
+                      # Traite numpy.
                       beamforming_mode: BeamformingMode = BeamformingMode.WEIGHTED_SUM
                       ) -> np.ndarray:
         """
@@ -673,7 +586,7 @@ class AudioProcessor:
         return mono_24k
 
     def _decode_pcm16(self, data: bytes, channels: int) -> np.ndarray:
-        """Décode PCM16 interleaved en float array (samples, channels)."""
+        # Décode PCM16 interleaved en float array (samples, channels).
         num_samples = len(data) // 2  # 2 bytes par sample
         samples = struct.unpack(f'<{num_samples}h', data)
 
@@ -685,28 +598,28 @@ class AudioProcessor:
         return float_samples.reshape(samples_per_channel, channels)
 
     def _encode_pcm16(self, audio: np.ndarray) -> bytes:
-        """Encode float array en PCM16."""
+        # Encode float array en PCM16.
         # Clip et convertir
         clipped = np.clip(audio, -1.0, 1.0)
         int_samples = (clipped * 32767).astype(np.int16)
         return int_samples.tobytes()
 
     def _calculate_level_db(self, audio: np.ndarray) -> float:
-        """Calcule le niveau en dB."""
+        # Calcule le niveau en dB.
         rms = np.sqrt(np.mean(audio**2))
         if rms > 0:
             return 20 * np.log10(rms)
         return -100.0
 
     def reset(self):
-        """Réinitialise tous les états internes."""
+        # Réinitialise tous les états internes.
         self.highpass.reset()
         self.agc.reset()
         self.noise_reducer.noise_profile = None
         self.stats = ProcessingStats()
 
     def get_stats(self) -> Dict[str, Any]:
-        """Retourne les statistiques de traitement."""
+        # Retourne les statistiques de traitement.
         return {
             'input_samples': self.stats.input_samples,
             'output_samples': self.stats.output_samples,
@@ -718,21 +631,10 @@ class AudioProcessor:
         }
 
 
-# =============================================================================
 # CONFIGURATION PRÉRÉGLÉES
-# =============================================================================
 
 def get_preset_config(preset: str) -> AudioConfig:
-    """
-    Retourne une configuration préréglée.
-
-    Presets disponibles:
-    - 'default': Configuration équilibrée
-    - 'quiet_room': Environnement silencieux (peu de traitement)
-    - 'noisy_room': Environnement bruité (traitement agressif)
-    - 'far_field': Locuteur à distance (gain élevé)
-    - 'close_talk': Locuteur proche (gain faible)
-    """
+    # Retourne une configuration préréglée.
     presets = {
         'default': AudioConfig(),
 
@@ -770,9 +672,7 @@ def get_preset_config(preset: str) -> AudioConfig:
     return presets.get(preset, presets['default'])
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     print("=" * 60)

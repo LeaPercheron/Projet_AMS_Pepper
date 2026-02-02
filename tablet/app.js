@@ -3,7 +3,6 @@
  * Application JavaScript pour l'interface tactile
  */
 
-// ==================== CONFIGURATION ====================
 const CONFIG = {
     // URL du serveur Mac (à configurer)
     serverUrl: 'ws://localhost:8765',
@@ -16,7 +15,6 @@ const CONFIG = {
     debug: true
 };
 
-// ==================== ÉTAT DE L'APPLICATION ====================
 const AppState = {
     currentScreen: 'home',
     connected: false,
@@ -28,7 +26,6 @@ const AppState = {
     currentFilter: 'all'
 };
 
-// ==================== APPLICATION PRINCIPALE ====================
 const App = {
     /**
      * Initialisation de l'application
@@ -242,7 +239,6 @@ const App = {
         text.textContent = message;
     },
 
-    // ==================== WEBSOCKET ====================
 
     /**
      * Connexion WebSocket au serveur Mac
@@ -354,7 +350,6 @@ const App = {
         }
     },
 
-    // ==================== UTILITAIRES ====================
 
     /**
      * Logger avec horodatage
@@ -467,7 +462,6 @@ const App = {
     }
 };
 
-// ==================== DÉMARRAGE ====================
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });

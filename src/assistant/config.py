@@ -1,15 +1,4 @@
-"""
-Configuration Centralisee
-=========================
-Tous les parametres ajustables du systeme en un seul fichier.
-
-Usage:
-    from assistant.config import Config, get_config, RunMode
-
-    config = get_config()
-    print(config.mode)
-    print(config.openai.api_key)
-"""
+# Configuration Centralisee
 
 import os
 import json
@@ -20,21 +9,19 @@ from typing import Optional, Dict, Any
 from enum import Enum
 
 
-# ==================== MODES ====================
 
 class RunMode(Enum):
-    """Modes d'execution."""
+    # Modes d'execution.
     DEVELOPMENT = "development"
     PRODUCTION = "production"
     SIMULATION = "simulation"
     TEST = "test"
 
 
-# ==================== CONFIGURATIONS MODULES ====================
 
 @dataclass
 class OpenAIConfig:
-    """Configuration OpenAI Realtime API."""
+    # Configuration OpenAI Realtime API.
     api_key: str = ""
     model: str = "gpt-4o-realtime-preview-2024-12-17"
     voice: str = "shimmer"
@@ -51,13 +38,14 @@ class OpenAIConfig:
     output_sample_rate: int = 24000
 
     def __post_init__(self):
+        # Gere init.
         if not self.api_key:
             self.api_key = os.getenv("OPENAI_API_KEY", "")
 
 
 @dataclass
 class AudioConfig:
-    """Configuration audio."""
+    # Configuration audio.
     # Microphone
     input_device_index: Optional[int] = None
     input_sample_rate: int = 24000
@@ -83,7 +71,7 @@ class AudioConfig:
 
 @dataclass
 class VisionConfig:
-    """Configuration module vision."""
+    # Configuration module vision.
     # Camera
     camera_index: int = 0
     camera_width: int = 640
@@ -109,7 +97,7 @@ class VisionConfig:
 
 @dataclass
 class DatabaseConfig:
-    """Configuration base de donnees."""
+    # Configuration base de donnees.
     db_path: str = "data/products.db"
     blacklist_path: str = "data/blacklist.json"
 
@@ -121,7 +109,7 @@ class DatabaseConfig:
 
 @dataclass
 class SecurityConfig:
-    """Configuration module securite."""
+    # Configuration module securite.
     filter_latency_target_ms: float = 1.0
     audio_directory: str = "data/security_audio"
     block_on_high_severity: bool = True
@@ -131,7 +119,7 @@ class SecurityConfig:
 
 @dataclass
 class OrchestratorConfig:
-    """Configuration orchestrateur."""
+    # Configuration orchestrateur.
     # Timeouts (secondes)
     idle_timeout: float = 60.0
     greeting_timeout: float = 10.0
@@ -152,7 +140,7 @@ class OrchestratorConfig:
 
 @dataclass
 class TabletConfig:
-    """Configuration interface tablette."""
+    # Configuration interface tablette.
     ws_host: str = "0.0.0.0"
     ws_port: int = 8765
     ping_interval: float = 30.0
@@ -162,7 +150,7 @@ class TabletConfig:
 
 @dataclass
 class PepperConfig:
-    """Configuration robot Pepper."""
+    # Configuration robot Pepper.
     ip: str = ""
     port: int = 9559
 
@@ -178,7 +166,7 @@ class PepperConfig:
 
 @dataclass
 class LoggingConfig:
-    """Configuration logging."""
+    # Configuration logging.
     log_directory: str = "logs"
     log_file_prefix: str = "pepper_assistant"
     format_jsonl: bool = True
@@ -189,11 +177,10 @@ class LoggingConfig:
     backup_count: int = 5
 
 
-# ==================== CONFIGURATION PRINCIPALE ====================
 
 @dataclass
 class Config:
-    """Configuration principale du systeme."""
+    # Configuration principale du systeme.
 
     mode: RunMode = RunMode.DEVELOPMENT
     PRODUCTION_MODE: bool = False
@@ -213,6 +200,7 @@ class Config:
     project_root: str = ""
 
     def __post_init__(self):
+        # Gere init.
         self.PRODUCTION_MODE = (self.mode == RunMode.PRODUCTION)
 
         if not self.project_root:
@@ -222,7 +210,7 @@ class Config:
         self._resolve_paths()
 
     def _resolve_paths(self):
-        """Resout les chemins relatifs en chemins absolus."""
+        # Resout les chemins relatifs en chemins absolus.
         root = Path(self.project_root)
 
         # Database
@@ -241,7 +229,7 @@ class Config:
             self.security.audio_directory = str(root / self.security.audio_directory)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convertit la configuration en dictionnaire."""
+        # Convertit la configuration en dictionnaire.
         result = {}
         for key, value in asdict(self).items():
             if isinstance(value, Enum):
@@ -251,13 +239,13 @@ class Config:
         return result
 
     def save(self, path: str):
-        """Sauvegarde la configuration dans un fichier JSON."""
+        # Sauvegarde la configuration dans un fichier JSON.
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
     @classmethod
     def load(cls, path: str) -> 'Config':
-        """Charge la configuration depuis un fichier JSON ou YAML."""
+        # Charge la configuration depuis un fichier JSON ou YAML.
         with open(path, 'r', encoding='utf-8') as f:
             if path.endswith('.yaml') or path.endswith('.yml'):
                 data = yaml.safe_load(f)
@@ -297,10 +285,9 @@ class Config:
         return config
 
 
-# ==================== CONFIGURATIONS PRE-DEFINIES ====================
 
 def get_development_config() -> Config:
-    """Configuration pour le developpement."""
+    # Configuration pour le developpement.
     return Config(
         mode=RunMode.DEVELOPMENT,
         openai=OpenAIConfig(temperature=0.8),
@@ -310,7 +297,7 @@ def get_development_config() -> Config:
 
 
 def get_production_config() -> Config:
-    """Configuration pour la production."""
+    # Configuration pour la production.
     return Config(
         mode=RunMode.PRODUCTION,
         openai=OpenAIConfig(temperature=0.6),
@@ -321,7 +308,7 @@ def get_production_config() -> Config:
 
 
 def get_simulation_config() -> Config:
-    """Configuration pour la simulation (sans materiel)."""
+    # Configuration pour la simulation (sans materiel).
     return Config(
         mode=RunMode.SIMULATION,
         vision=VisionConfig(camera_index=-1),
@@ -332,7 +319,7 @@ def get_simulation_config() -> Config:
 
 
 def get_test_config() -> Config:
-    """Configuration pour les tests."""
+    # Configuration pour les tests.
     return Config(
         mode=RunMode.TEST,
         orchestrator=OrchestratorConfig(
@@ -347,21 +334,12 @@ def get_test_config() -> Config:
     )
 
 
-# ==================== SINGLETON ====================
 
 _config_instance: Optional[Config] = None
 
 
 def get_config(mode: Optional[RunMode] = None) -> Config:
-    """
-    Recupere l'instance de configuration (singleton).
-
-    Args:
-        mode: Mode d'execution (si None, utilise la variable d'environnement ou DEVELOPMENT)
-
-    Returns:
-        Instance de configuration
-    """
+    # Recupere l'instance de configuration (singleton).
     global _config_instance
 
     if _config_instance is None:
@@ -382,6 +360,6 @@ def get_config(mode: Optional[RunMode] = None) -> Config:
 
 
 def reset_config():
-    """Reinitialise la configuration (pour les tests)."""
+    # Reinitialise la configuration (pour les tests).
     global _config_instance
     _config_instance = None

@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""
-Diagnostics Pepper (Pepper seul)
-================================
-Valide la connexion NAOqi et les E/S basiques du robot, indépendamment du programme.
-
-Tests couverts (A1 -> A6, A7 optionnel):
-- A1: Ping + connexion NAOqi + listing services
- - A2: Caméra (ALVideoDevice) - capture image 640x480
- - A3: Micro 4 canaux (ALAudioRecorder) - enregistrement WAV
- - A4: Sortie audio (ALAudioDevice.sendRemoteBufferToOutput) + fallback
- - A5: Tablette (ALTabletService) - affiche une page test
- - A6: LEDs (ALLeds) - séquence de couleurs
- - A7: setFileAsInput (optionnel) - injection WAV dans le micro Pepper
-"""
+# Diagnostics Pepper (Pepper seul)
 
 from __future__ import annotations
 
@@ -27,9 +14,7 @@ from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
 
-# -----------------------------
 # Configs/constantes NAOqi
-# -----------------------------
 CAMERA_RESOLUTIONS = {
     1: (160, 120),
     2: (320, 240),
@@ -47,6 +32,7 @@ class TestResult:
 
 
 def _safe_call(label: str, fn: Callable[[], None]) -> TestResult:
+    # Gere call.
     try:
         fn()
         return TestResult(label, True, "OK")
@@ -55,16 +41,17 @@ def _safe_call(label: str, fn: Callable[[], None]) -> TestResult:
 
 
 def _print_header(title: str) -> None:
+    # Gere header.
     print("\n" + "=" * 70)
     print(title)
     print("=" * 70)
 
 
-# -----------------------------
 # A1: Ping + NAOqi
-# -----------------------------
 def test_ping(ip: str, count: int = 4) -> TestResult:
+    # Gere ping.
     def _run():
+        # Execute l'action.
         print(f"[PING] {ip} ({count} paquets)")
         result = subprocess.run(
             ["ping", "-c", str(count), ip],
@@ -80,9 +67,11 @@ def test_ping(ip: str, count: int = 4) -> TestResult:
 
 
 def test_naoqi_connect(ip: str, port: int) -> Tuple[TestResult, Optional[object]]:
+    # Gere naoqi connect.
     session = None
 
     def _run():
+        # Execute l'action.
         nonlocal session
         try:
             import qi
@@ -105,7 +94,9 @@ def test_naoqi_connect(ip: str, port: int) -> Tuple[TestResult, Optional[object]
 
 
 def test_list_services(session) -> TestResult:
+    # Gere list services.
     def _run():
+        # Execute l'action.
         services = []
         if hasattr(session, "services"):
             services = session.services()
@@ -121,11 +112,11 @@ def test_list_services(session) -> TestResult:
     return _safe_call("A1.Services", _run)
 
 
-# -----------------------------
 # A2: Caméra
-# -----------------------------
 def test_camera_capture(session, output_dir: Path, resolution: int = 3, camera_id: int = 0) -> TestResult:
+    # Gere camera capture.
     def _run():
+        # Execute l'action.
         video = session.service("ALVideoDevice")
         width, height = CAMERA_RESOLUTIONS.get(resolution, (640, 480))
         client_name = "pepper_diag_cam"
@@ -170,11 +161,11 @@ def test_camera_capture(session, output_dir: Path, resolution: int = 3, camera_i
     return _safe_call("A2.Camera", _run)
 
 
-# -----------------------------
 # A3: Micro 4 canaux (ALAudioRecorder)
-# -----------------------------
 def test_audio_record(session, output_dir: Path, duration_s: float = 5.0) -> TestResult:
+    # Gere audio record.
     def _run():
+        # Execute l'action.
         recorder = session.service("ALAudioRecorder")
         file_path = "/home/nao/pepper_diag_audio.wav"
         sample_rate = 48000
@@ -215,10 +206,9 @@ def test_audio_record(session, output_dir: Path, duration_s: float = 5.0) -> Tes
     return _safe_call("A3.Micro", _run)
 
 
-# -----------------------------
 # A4: Sortie audio (streaming)
-# -----------------------------
 def _generate_sine_pcm16(freq_hz: float, duration_s: float, sample_rate: int) -> bytes:
+    # Gere sine pcm16.
     samples = int(sample_rate * duration_s)
     pcm = bytearray()
     for n in range(samples):
@@ -228,7 +218,9 @@ def _generate_sine_pcm16(freq_hz: float, duration_s: float, sample_rate: int) ->
 
 
 def test_audio_output(session, duration_s: float = 1.5, sample_rate: int = 16000) -> TestResult:
+    # Gere audio output.
     def _run():
+        # Execute l'action.
         audio = session.service("ALAudioDevice")
         pcm = _generate_sine_pcm16(440.0, duration_s, sample_rate)
         channels = 1
@@ -260,11 +252,11 @@ def test_audio_output(session, duration_s: float = 1.5, sample_rate: int = 16000
     return _safe_call("A4.AudioOut", _run)
 
 
-# -----------------------------
 # A5: Tablette
-# -----------------------------
 def test_tablet(session, url: str, display_s: float = 5.0) -> TestResult:
+    # Gere tablet.
     def _run():
+        # Execute l'action.
         tablet = session.service("ALTabletService")
         print(f"[TABLET] Affichage {url}")
         tablet.showWebview(url)
@@ -275,11 +267,11 @@ def test_tablet(session, url: str, display_s: float = 5.0) -> TestResult:
     return _safe_call("A5.Tablet", _run)
 
 
-# -----------------------------
 # A6: LEDs
-# -----------------------------
 def test_leds(session) -> TestResult:
+    # Gere leds.
     def _run():
+        # Execute l'action.
         leds = session.service("ALLeds")
         colors = {
             "violet": 0x7F00FF,
@@ -297,11 +289,11 @@ def test_leds(session) -> TestResult:
     return _safe_call("A6.LEDs", _run)
 
 
-# -----------------------------
 # A7: setFileAsInput
-# -----------------------------
 def test_set_file_as_input(session, pepper_wav_path: str) -> TestResult:
+    # Gere set file as input.
     def _run():
+        # Execute l'action.
         audio = session.service("ALAudioDevice")
         print(f"[AUDIO] setFileAsInput: {pepper_wav_path}")
         audio.setFileAsInput(pepper_wav_path)
@@ -310,10 +302,9 @@ def test_set_file_as_input(session, pepper_wav_path: str) -> TestResult:
     return _safe_call("A7.SetFileAsInput", _run)
 
 
-# -----------------------------
 # Main
-# -----------------------------
 def main() -> int:
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Diagnostics Pepper (Pepper seul)")
     parser.add_argument("--pepper-ip", required=True, help="IP du robot Pepper")
     parser.add_argument("--pepper-port", type=int, default=9559, help="Port NAOqi (defaut: 9559)")
@@ -372,6 +363,7 @@ def main() -> int:
 
 
 def _print_summary(results: List[TestResult]) -> None:
+    # Gere summary.
     passed = sum(1 for r in results if r.passed)
     total = len(results)
     print(f"Tests: {passed}/{total} reussis")
