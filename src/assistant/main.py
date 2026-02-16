@@ -9,10 +9,21 @@ import os
 from pathlib import Path
 from typing import Optional
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
 # Ajouter le repertoire src au path
 src_path = Path(__file__).parent.parent
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
+
+# Charger automatiquement .env si python-dotenv est disponible.
+if load_dotenv is not None:
+    project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(project_root / ".env")
+    load_dotenv()
 
 from assistant.config import (
     Config, RunMode, get_config, reset_config,
@@ -126,8 +137,13 @@ class PepperAssistant:
         try:
             from assistant.safety import SecurityModule, SecurityConfig as SecConfig
 
-            # SecurityConfig utilise les valeurs par defaut
-            self.security_module = SecurityModule(SecConfig())
+            sec_config = SecConfig(
+                strict_mode=self.config.security.strict_mode
+            )
+            self.security_module = SecurityModule(
+                sec_config,
+                blacklist_path=self.config.database.blacklist_path
+            )
 
             self.logger.log_info("  Module securite: OK")
 
@@ -154,7 +170,10 @@ class PepperAssistant:
                 confidence_medium=self.config.vision.confidence_medium
             )
 
-            self.vision_pipeline = VisionModule(vision_config)
+            self.vision_pipeline = VisionModule(
+                vision_config,
+                database_path=self.config.database.db_path
+            )
             self.logger.log_info(f"  Vision: {self.config.vision.vlm_model}")
 
         except ImportError as e:
@@ -245,6 +264,12 @@ class PepperAssistant:
                 self.orchestrator.set_security_module(self.security_module)
             if self.vision_pipeline:
                 self.orchestrator.set_vision_module(self.vision_pipeline)
+            if self.openai_client:
+                self.orchestrator.set_realtime_client(self.openai_client)
+            if self.adapter:
+                self.orchestrator.set_audio_module(self.adapter)
+                self.orchestrator.set_video_module(self.adapter)
+                self.orchestrator.set_robot_actions(self.adapter)
 
             self.logger.log_info("  Orchestrateur: OK")
 

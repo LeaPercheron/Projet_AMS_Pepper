@@ -55,9 +55,15 @@ python -m assistant.main --simulation
 # Mode avec Pepper
 python -m assistant.main --pepper-ip 192.168.1.100
 
+# Mode Pepper sans qi local (fallback SSH)
+PEPPER_FORCE_SSH_BRIDGE=1 python -m assistant.main --pepper-ip 192.168.1.100
+
 # Mode debug
 python -m assistant.main --simulation --debug
 ```
+
+> Note: le mode SSH bridge requiert un accès SSH sans prompt vers Pepper
+> (clé SSH recommandée) et `python`+`qi` disponibles sur le robot.
 
 ## Structure du Projet
 

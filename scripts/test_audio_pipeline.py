@@ -181,7 +181,9 @@ class AudioPipelineTester:
             start = time.time()
 
             if self.processor:
-                output_audio = self.processor.resample(input_audio)
+                samples = np.frombuffer(input_audio, dtype=np.int16).astype(np.float64) / 32768.0
+                resampled = self.processor.resampler.process(samples)
+                output_audio = (np.clip(resampled, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             else:
                 # Resampling manuel (moyenne 2 samples)
                 samples = np.frombuffer(input_audio, dtype=np.int16).astype(np.float32)
@@ -234,7 +236,10 @@ class AudioPipelineTester:
             start = time.time()
 
             if self.processor:
-                output_audio = self.processor.beamform(input_audio)
+                samples = np.frombuffer(input_audio, dtype=np.int16).astype(np.float64) / 32768.0
+                samples_4ch = samples.reshape(-1, 4)
+                mono = self.processor.beamformer.process(samples_4ch)
+                output_audio = (np.clip(mono, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             else:
                 # Beamforming manuel (moyenne des canaux)
                 samples = np.frombuffer(input_audio, dtype=np.int16).reshape(-1, 4).astype(np.float32)
@@ -285,7 +290,9 @@ class AudioPipelineTester:
             start = time.time()
 
             if self.processor:
-                output_audio = self.processor.reduce_noise(input_audio)
+                input_float = mixed.astype(np.float64) / 32768.0
+                output_float = self.processor.noise_reducer.process(input_float)
+                output_audio = (np.clip(output_float, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             else:
                 # Filtrage passe-bas simple (simulation)
                 from scipy import signal as scipy_signal
@@ -347,7 +354,9 @@ class AudioPipelineTester:
             start = time.time()
 
             if self.processor:
-                output_audio = self.processor.apply_agc(weak_input)
+                weak_float = samples.astype(np.float64) / 32768.0
+                output_float = self.processor.agc.process(weak_float)
+                output_audio = (np.clip(output_float, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
             else:
                 # AGC simple (normalisation)
                 max_val = np.max(np.abs(samples))

@@ -7,6 +7,7 @@ import time
 import json
 import wave
 import struct
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Callable, Set
@@ -409,6 +410,11 @@ class Orchestrator:
         # Tâches asynchrones
         self._tasks: List[asyncio.Task] = []
         self._running = False
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._streams_started = False
+        self._realtime_callbacks_registered = False
+        self._last_vision_inference_ts = 0.0
+        self._last_product_shown_ts = 0.0
 
         # Modules externes (à injecter)
         self._audio_module = None
@@ -418,6 +424,7 @@ class Orchestrator:
         self._security_module = None
         self._realtime_client = None
         self._robot_actions = None
+        self._audio_processor = None
 
         # Micro-phrases pré-chargées
         self._phrases_cache: Dict[str, List[str]] = MICRO_PHRASES.copy()
@@ -507,6 +514,7 @@ class Orchestrator:
     def _on_enter_displaying(self, state: State, event: Event):
         # Affichage info produit.
         asyncio.create_task(self._set_leds(LED_COLORS[State.DISPLAYING_INFO]))
+        asyncio.create_task(self._announce_product_info())
 
     def _on_enter_error(self, state: State, event: Event):
         # Entrée en état d'erreur.
@@ -534,19 +542,27 @@ class Orchestrator:
         phrase = random.choice(phrases) if index == 0 else phrases[min(index - 1, len(phrases) - 1)]
 
         logger.debug(f"Phrase: {phrase}")
-
-        # TODO: Lecture audio réelle
-        # if self._robot_actions:
-        #     await self._robot_actions.say(phrase)
+        if self._robot_actions and hasattr(self._robot_actions, "say"):
+            try:
+                await asyncio.to_thread(self._robot_actions.say, phrase, False)
+            except Exception as e:
+                logger.error(f"Erreur lecture phrase: {e}")
 
     async def _set_leds(self, color: tuple, fade_ms: int = None):
         # Configure les LEDs avec fade.
         fade_ms = fade_ms or self.config.led_fade_duration_ms
         logger.debug(f"LEDs: RGB{color} (fade {fade_ms}ms)")
+        if not self._robot_actions or not hasattr(self._robot_actions, "set_led_rgb"):
+            return
 
-        # TODO: Commande LEDs réelle
-        # if self._robot_actions:
-        #     await self._robot_actions.fade_leds(color, fade_ms)
+        # Les couleurs de la state-machine sont en [0,1], l'adaptateur attend [0,255].
+        r = int(max(0.0, min(1.0, color[0])) * 255)
+        g = int(max(0.0, min(1.0, color[1])) * 255)
+        b = int(max(0.0, min(1.0, color[2])) * 255)
+        try:
+            await asyncio.to_thread(self._robot_actions.set_led_rgb, r, g, b, True)
+        except Exception as e:
+            logger.error(f"Erreur commande LEDs: {e}")
 
     # GESTION ÉVÉNEMENTS
 
@@ -557,11 +573,18 @@ class Orchestrator:
 
     def send_event_sync(self, event: Event, data: Dict = None):
         # Version synchrone de send_event (pour callbacks).
-        if self._event_queue:
+        if not self._event_queue or not self._loop:
+            return
+
+        payload = (event, data or {})
+
+        def _put():
             try:
-                self._event_queue.put_nowait((event, data or {}))
+                self._event_queue.put_nowait(payload)
             except asyncio.QueueFull:
                 logger.warning(f"Event queue full, dropping {event.name}")
+
+        self._loop.call_soon_threadsafe(_put)
 
     async def _process_events(self):
         # Tâche de traitement des événements.
@@ -609,10 +632,337 @@ class Orchestrator:
 
         elif event == Event.BARCODE_DETECTED:
             self.context.current_ean = data.get("ean", "")
+            if data.get("product_name"):
+                self.context.current_product_name = data.get("product_name", "")
 
         elif event == Event.SECURITY_ALERT:
             self.context.security_alert_active = True
             self._stats["security_alerts"] += 1
+
+    async def _announce_product_info(self):
+        # Énonce un résumé produit après identification.
+        if not self._robot_actions or not hasattr(self._robot_actions, "say"):
+            return
+
+        product = self._find_product_for_context()
+        if not product:
+            if self.context.current_product_name:
+                await asyncio.to_thread(
+                    self._robot_actions.say,
+                    f"J'ai identifié {self.context.current_product_name}.",
+                    False
+                )
+            return
+
+        name = getattr(product, "name", "") or self.context.current_product_name
+        brand = getattr(product, "brand", "")
+        price = getattr(product, "price", 0.0)
+        usage = getattr(product, "usage", "")
+
+        parts = []
+        if name and brand:
+            parts.append(f"{name} de {brand}.")
+        elif name:
+            parts.append(f"{name}.")
+        if isinstance(price, (int, float)) and price > 0:
+            parts.append(f"Prix indicatif {price:.2f} euros.")
+        if usage:
+            parts.append(f"Usage: {usage}.")
+
+        if parts:
+            await asyncio.to_thread(self._robot_actions.say, " ".join(parts), False)
+
+    def _find_product_for_context(self):
+        # Récupère le produit courant depuis la DB selon EAN ou nom.
+        if not self._database_module:
+            return None
+
+        if self.context.current_ean and hasattr(self._database_module, "get_by_ean"):
+            try:
+                product = self._database_module.get_by_ean(self.context.current_ean)
+                if product:
+                    return product
+            except Exception:
+                pass
+
+        if self.context.current_product_name and hasattr(self._database_module, "search_fuzzy"):
+            try:
+                results = self._database_module.search_fuzzy(
+                    self.context.current_product_name,
+                    limit=1,
+                    min_score=0.45
+                )
+                if results:
+                    first = results[0]
+                    return first.product if hasattr(first, "product") else first
+            except Exception:
+                pass
+        return None
+
+    def _register_realtime_callbacks(self):
+        # Branche les callbacks du client Realtime vers l'orchestrateur.
+        if not self._realtime_client or self._realtime_callbacks_registered:
+            return
+
+        self._realtime_client.on('on_audio_received', self._on_realtime_audio_received)
+        self._realtime_client.on('on_speech_started', self._on_realtime_speech_started)
+        self._realtime_client.on('on_speech_stopped', self._on_realtime_speech_stopped)
+        self._realtime_client.on('on_transcript', self._on_realtime_transcript)
+        self._realtime_client.on('on_error', self._on_realtime_error)
+        self._realtime_callbacks_registered = True
+
+    def _on_realtime_audio_received(self, audio_bytes: bytes):
+        # Joue l'audio TTS reçu depuis OpenAI sur le robot.
+        if self._audio_module and hasattr(self._audio_module, "play_audio"):
+            try:
+                self._audio_module.play_audio(audio_bytes)
+            except Exception as e:
+                logger.error(f"Erreur playback audio: {e}")
+
+    def _on_realtime_speech_started(self):
+        # Callback VAD: début de parole utilisateur.
+        self.send_event_sync(Event.SPEECH_DETECTED, {"text": ""})
+
+    def _on_realtime_speech_stopped(self):
+        # Callback VAD: fin de parole utilisateur.
+        self.send_event_sync(Event.SPEECH_ENDED, {})
+
+    def _on_realtime_transcript(self, text: str):
+        # Callback transcript utilisateur.
+        text = (text or "").strip()
+        if not text:
+            return
+
+        self.context.conversation_history.append({
+            "role": "user",
+            "text": text,
+            "timestamp": time.time()
+        })
+        if len(self.context.conversation_history) > 30:
+            self.context.conversation_history.pop(0)
+
+        lowered = text.lower()
+        if any(x in lowered for x in ("au revoir", "aurevoir", "bye", "à bientôt")):
+            self.send_event_sync(Event.GOODBYE_DETECTED, {"text": text})
+            return
+
+        if self._security_module and hasattr(self._security_module, "check_text"):
+            try:
+                alert = self._security_module.check_text(text)
+                if alert and alert.triggered:
+                    self.send_event_sync(Event.SECURITY_ALERT, {
+                        "text": text,
+                        "alert_type": alert.alert_type.value,
+                        "message": alert.response,
+                    })
+                    if self._robot_actions and hasattr(self._robot_actions, "say") and alert.response and self._loop:
+                        self._loop.call_soon_threadsafe(
+                            lambda: asyncio.create_task(
+                                asyncio.to_thread(self._robot_actions.say, alert.response, False)
+                            )
+                        )
+                    return
+            except Exception as e:
+                logger.error(f"Erreur filtre sécurité transcript: {e}")
+
+        self.send_event_sync(Event.QUESTION_ASKED, {"text": text})
+
+    def _on_realtime_error(self, error_msg: str):
+        # Callback erreur réseau / API Realtime.
+        self.send_event_sync(Event.NETWORK_ERROR, {"error": error_msg})
+
+    def _enqueue_audio_data(self, audio_data: bytes):
+        # Enqueue audio en loop thread.
+        if not self._audio_queue:
+            return
+        try:
+            self._audio_queue.put_nowait(audio_data)
+        except asyncio.QueueFull:
+            logger.warning("Audio queue pleine, frame ignoree")
+
+    def _enqueue_video_frame(self, frame_bytes: bytes):
+        # Enqueue frame vidéo en loop thread.
+        if not self._video_queue:
+            return
+        try:
+            self._video_queue.put_nowait(frame_bytes)
+        except asyncio.QueueFull:
+            logger.warning("Video queue pleine, frame ignoree")
+
+    def _on_audio_captured(self, audio_data: bytes):
+        # Callback thread-safe pour capture audio robot.
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._enqueue_audio_data, audio_data)
+
+    def _on_video_captured(self, frame_bytes: bytes):
+        # Callback thread-safe pour capture vidéo robot.
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._enqueue_video_frame, frame_bytes)
+
+    def _extract_image_from_frame(self, frame_bytes: bytes):
+        # Convertit bytes RGB bruts en image PIL.
+        if not frame_bytes:
+            return None
+        data = bytes(frame_bytes)
+        if len(data) < 3 or len(data) % 3 != 0:
+            return None
+
+        pixel_count = len(data) // 3
+        known_sizes = [
+            (640, 480),
+            (320, 240),
+            (1280, 960),
+            (100, 100),
+        ]
+        width, height = 0, 0
+        for w, h in known_sizes:
+            if w * h == pixel_count:
+                width, height = w, h
+                break
+
+        if not width:
+            side = int(pixel_count ** 0.5)
+            if side * side == pixel_count:
+                width, height = side, side
+            else:
+                return None
+
+        try:
+            from PIL import Image
+            return Image.frombytes("RGB", (width, height), data[: width * height * 3])
+        except Exception:
+            return None
+
+    async def _evaluate_video_frame(self, frame_bytes: bytes):
+        # Exécute l'identification vision et déclenche les événements d'état.
+        if not self._vision_module:
+            return
+
+        image = self._extract_image_from_frame(frame_bytes)
+        if image is None:
+            return
+
+        try:
+            result = await asyncio.to_thread(self._vision_module.identify_product, [image])
+        except Exception as e:
+            logger.error(f"Erreur vision: {e}")
+            await self.send_event(Event.VLM_FAILED, {"error": str(e)})
+            return
+
+        if not result:
+            return
+
+        raw = result.raw_result
+        if not result.success:
+            await self.send_event(Event.VLM_FAILED, {"message": result.message})
+            return
+
+        # Priorité sécurité sur EAN dès qu'un code-barres est identifié.
+        ean = ""
+        if raw and getattr(raw, "barcode_result", None):
+            ean = getattr(raw.barcode_result, "ean13", "") or ""
+
+        if ean and self._security_module and hasattr(self._security_module, "check_ean"):
+            alert = self._security_module.check_ean(ean)
+            if alert.triggered:
+                await self.send_event(Event.SECURITY_ALERT, {
+                    "ean": ean,
+                    "alert_type": alert.alert_type.value,
+                    "message": alert.response,
+                })
+                if self._robot_actions and hasattr(self._robot_actions, "say") and alert.response:
+                    await asyncio.to_thread(self._robot_actions.say, alert.response, False)
+                return
+
+        if raw and getattr(raw, "source", None):
+            source = raw.source.value
+        else:
+            source = result.confidence_level.value
+
+        if source in ("barcode", "fallback"):
+            await self.send_event(Event.BARCODE_DETECTED, {
+                "ean": ean,
+                "product_name": getattr(raw, "product_name", ""),
+                "confidence": getattr(raw, "confidence", 0.0),
+            })
+            return
+
+        if source == "vlm_high" or result.confidence_level.value == "high":
+            top = result.top_prediction
+            await self.send_event(Event.VLM_HIGH_CONFIDENCE, {
+                "product_name": top.name if top else getattr(raw, "product_name", ""),
+                "confidence": top.confidence if top else getattr(raw, "confidence", 0.0),
+            })
+            return
+
+        if source == "vlm_medium" or result.confidence_level.value == "medium":
+            candidates = []
+            for pred in result.predictions:
+                candidates.append({
+                    "name": pred.name,
+                    "brand": pred.brand,
+                    "score": pred.confidence,
+                    "product_id": pred.product_id or "",
+                })
+            await self.send_event(Event.VLM_MEDIUM_CONFIDENCE, {
+                "candidates": candidates,
+                "confidence": result.top_prediction.confidence if result.top_prediction else 0.0,
+            })
+            return
+
+        await self.send_event(Event.VLM_LOW_CONFIDENCE, {
+            "confidence": result.top_prediction.confidence if result.top_prediction else 0.0
+        })
+
+    async def _start_runtime_streams(self):
+        # Démarre capture audio/vidéo et callbacks runtime.
+        if self._streams_started:
+            return
+
+        self._register_realtime_callbacks()
+
+        if self._audio_processor is None:
+            try:
+                from assistant.audio import AudioProcessor, get_preset_config
+                self._audio_processor = AudioProcessor(get_preset_config("noisy_room"))
+            except Exception as e:
+                logger.warning(f"AudioProcessor indisponible: {e}")
+                self._audio_processor = None
+
+        if self._audio_module and hasattr(self._audio_module, "start_audio_capture"):
+            try:
+                ok = await asyncio.to_thread(self._audio_module.start_audio_capture, self._on_audio_captured)
+                logger.info(f"Capture audio {'active' if ok else 'inactive'}")
+            except Exception as e:
+                logger.error(f"Erreur démarrage capture audio: {e}")
+
+        if self._video_module and hasattr(self._video_module, "start_video_stream"):
+            try:
+                ok = await asyncio.to_thread(self._video_module.start_video_stream, self._on_video_captured)
+                logger.info(f"Capture video {'active' if ok else 'inactive'}")
+            except Exception as e:
+                logger.error(f"Erreur démarrage capture video: {e}")
+
+        self._streams_started = True
+
+    async def _stop_runtime_streams(self):
+        # Arrête capture audio/vidéo si activées.
+        if not self._streams_started:
+            return
+
+        if self._audio_module and hasattr(self._audio_module, "stop_audio_capture"):
+            try:
+                await asyncio.to_thread(self._audio_module.stop_audio_capture)
+            except Exception:
+                pass
+
+        if self._video_module and hasattr(self._video_module, "stop_video_stream"):
+            try:
+                await asyncio.to_thread(self._video_module.stop_video_stream)
+            except Exception:
+                pass
+
+        self._streams_started = False
 
     async def _check_timeout(self):
         # Vérifie les timeouts selon l'état actuel.
@@ -645,9 +995,12 @@ class Orchestrator:
 
         while self._running:
             try:
-                # TODO: Vérifier présence réelle via capteurs Pepper
-                # Pour simulation, on simule une présence stable
                 presence = self.context.person_detected
+                if self._robot_actions and hasattr(self._robot_actions, "is_person_present"):
+                    try:
+                        presence = bool(self._robot_actions.is_person_present())
+                    except Exception:
+                        presence = self.context.person_detected
 
                 if presence != last_presence:
                     if presence:
@@ -672,8 +1025,14 @@ class Orchestrator:
                         timeout=0.1
                     )
 
-                    # Traiter les données audio
-                    # TODO: Envoyer à OpenAI Realtime, détecter fin de parole, etc.
+                    if self._realtime_client and self._realtime_client.is_connected():
+                        payload = audio_data
+                        if self._audio_processor:
+                            try:
+                                payload = self._audio_processor.process(audio_data)
+                            except Exception as e:
+                                logger.error(f"Erreur processing audio: {e}")
+                        self._realtime_client.send_audio(payload)
 
             except asyncio.TimeoutError:
                 pass
@@ -690,8 +1049,24 @@ class Orchestrator:
                         timeout=0.1
                     )
 
-                    # Traiter la frame
-                    # TODO: Détection produit, code-barres, etc.
+                    state = self.state_machine.state
+                    now = time.time()
+
+                    # Quand on voit un produit en phase d'accueil, déclencher l'entrée en scan.
+                    if state in (State.GREETING, State.AWAITING_INTENT):
+                        if now - self._last_product_shown_ts > 1.5:
+                            self._last_product_shown_ts = now
+                            await self.send_event(Event.PRODUCT_SHOWN, {})
+                        continue
+
+                    # Détection visuelle active uniquement en états de scan.
+                    if state not in (State.SCANNING_PRODUCT, State.SCANNING_BARCODE, State.CONFIRMING_TOP3):
+                        continue
+
+                    if now - self._last_vision_inference_ts < 1.0:
+                        continue
+                    self._last_vision_inference_ts = now
+                    await self._evaluate_video_frame(frame)
 
             except asyncio.TimeoutError:
                 pass
@@ -706,9 +1081,13 @@ class Orchestrator:
 
         # Passer en mode dégradé
         await self.send_event(Event.NETWORK_ERROR)
-
-        # TODO: Activer mode tablette
-        # TODO: Tentative de reconnexion
+        if self._realtime_client and not self._realtime_client.is_connected():
+            try:
+                ok = await asyncio.to_thread(self._realtime_client.connect)
+                if ok:
+                    await self.send_event(Event.RECOVERY_COMPLETE)
+            except Exception as e:
+                logger.error(f"Reconnexion realtime impossible: {e}")
 
     async def _handle_vlm_fallback(self):
         # Fallback VLM vers code-barres.
@@ -723,7 +1102,20 @@ class Orchestrator:
         self.context.reset()
 
         # Réinitialiser les modules si nécessaire
-        # TODO: Reconnecter les modules
+        if self._robot_actions and hasattr(self._robot_actions, "connect"):
+            try:
+                if not getattr(self._robot_actions, "is_connected", False):
+                    await asyncio.to_thread(self._robot_actions.connect)
+            except Exception as e:
+                logger.error(f"Reconnect robot impossible: {e}")
+
+        if self._realtime_client and not self._realtime_client.is_connected():
+            try:
+                await asyncio.to_thread(self._realtime_client.connect)
+            except Exception as e:
+                logger.error(f"Reconnect realtime impossible: {e}")
+
+        await self._start_runtime_streams()
 
         await asyncio.sleep(2.0)
 
@@ -737,6 +1129,7 @@ class Orchestrator:
         logger.info("Démarrage de l'orchestrateur...")
 
         self._running = True
+        self._loop = asyncio.get_running_loop()
 
         # Créer les queues
         self._event_queue = asyncio.Queue(maxsize=self.config.max_queue_size)
@@ -751,6 +1144,8 @@ class Orchestrator:
             asyncio.create_task(self._video_stream_handler()),
         ]
 
+        await self._start_runtime_streams()
+
         # LEDs initiales
         await self._set_leds(LED_COLORS[State.IDLE])
 
@@ -761,6 +1156,7 @@ class Orchestrator:
         logger.info("Arrêt de l'orchestrateur...")
 
         self._running = False
+        await self._stop_runtime_streams()
 
         # Annuler les tâches
         for task in self._tasks:
@@ -771,6 +1167,7 @@ class Orchestrator:
                 pass
 
         self._tasks.clear()
+        self._loop = None
 
         # Réinitialiser
         self.state_machine.reset()

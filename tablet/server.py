@@ -405,13 +405,13 @@ class TabletBridge:
 
 
 
-async def test_server():
+async def test_server(config: Optional[ServerConfig] = None):
     # Test du serveur WebSocket.
     print("=" * 60)
     print("TEST SERVEUR WEBSOCKET TABLETTE")
     print("=" * 60)
 
-    config = ServerConfig(
+    config = config or ServerConfig(
         host="localhost",
         port=8765,
         log_level="DEBUG"
@@ -446,4 +446,4 @@ if __name__ == "__main__":
         log_level="DEBUG" if args.debug else "INFO"
     )
 
-    asyncio.run(test_server())
+    asyncio.run(test_server(config))

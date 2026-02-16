@@ -290,7 +290,23 @@ class BarcodeDetector:
             self._pyzbar = pyzbar
             self._pyzbar_available = True
         except ImportError:
-            print("[BarcodeDetector] pyzbar non disponible - pip install pyzbar")
+            # Sur macOS/Homebrew, libzbar peut être installée hors chemins dynamiques par défaut.
+            brew_lib = "/opt/homebrew/lib"
+            libzbar = os.path.join(brew_lib, "libzbar.dylib")
+            current = os.getenv("DYLD_FALLBACK_LIBRARY_PATH", "")
+            needs_retry = os.path.exists(libzbar) and brew_lib not in current.split(":")
+            if needs_retry:
+                os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = (
+                    f"{brew_lib}:{current}" if current else brew_lib
+                )
+                try:
+                    from pyzbar import pyzbar
+                    self._pyzbar = pyzbar
+                    self._pyzbar_available = True
+                except ImportError:
+                    pass
+            if not self._pyzbar_available:
+                print("[BarcodeDetector] pyzbar non disponible - pip install pyzbar")
 
     def detect_in_images(self, images: List[Image.Image]) -> Optional[BarcodeResult]:
         # Détecte les codes-barres dans plusieurs images.
@@ -941,17 +957,33 @@ def create_vision_pipeline(
     """
     import json
 
-    # Charger la base de données
-    database = {}
-    if database_path and os.path.exists(database_path):
-        with open(database_path, 'r', encoding='utf-8') as f:
-            database = json.load(f)
-    else:
-        # Utiliser la base mock par défaut
-        default_path = Path(__file__).parent.parent / "poc" / "mock_database.json"
-        if default_path.exists():
-            with open(default_path, 'r', encoding='utf-8') as f:
+    # Charger la base de données (JSON export ou SQLite)
+    database: Dict[str, Any] = {}
+    resolved_path: Optional[Path] = Path(database_path) if database_path else None
+
+    if resolved_path and resolved_path.exists():
+        if resolved_path.suffix.lower() == ".db":
+            try:
+                from assistant.database import ProductDatabase
+                db = ProductDatabase(str(resolved_path))
+                database = {"products": [p.to_dict() for p in db.get_all_products()]}
+            except Exception as e:
+                print(f"[Vision] Erreur chargement SQLite {resolved_path}: {e}")
+        else:
+            with open(resolved_path, 'r', encoding='utf-8') as f:
                 database = json.load(f)
+    else:
+        # Fallback principal: export JSON du projet
+        project_root = Path(__file__).resolve().parents[3]
+        default_candidates = [
+            project_root / "data" / "products_export.json",
+            Path(__file__).parent.parent / "poc" / "mock_database.json",
+        ]
+        for candidate in default_candidates:
+            if candidate.exists():
+                with open(candidate, 'r', encoding='utf-8') as f:
+                    database = json.load(f)
+                break
 
     return VisionPipeline(database, use_simulation=use_simulation)
 

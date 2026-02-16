@@ -4,8 +4,20 @@
  */
 
 const CONFIG = {
-    // URL du serveur Mac (à configurer)
-    serverUrl: 'ws://localhost:8765',
+    // URL du serveur WS: query param ?ws=... > host page > localhost
+    serverUrl: (() => {
+        let wsParam = '';
+        try {
+            wsParam = new URLSearchParams(window.location.search).get('ws') || '';
+        } catch (e) {
+            wsParam = '';
+        }
+        if (wsParam) return wsParam;
+
+        const host = window.location.hostname || 'localhost';
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        return `${protocol}://${host}:8765`;
+    })(),
 
     // Timeouts
     connectionTimeout: 5000,

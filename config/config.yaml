@@ -7,6 +7,11 @@ mode: development  # development | production | simulation | test
 pepper:
   ip: ""  # Laisser vide pour mode simulation
   port: 9559
+  # Fallback si qi absent sur le Mac: bridge SSH vers Pepper
+  ssh_user: nao
+  ssh_port: 22
+  ssh_python: python
+  force_ssh_bridge: false
   # Timeouts (secondes)
   connection_timeout: 10
   command_timeout: 5
