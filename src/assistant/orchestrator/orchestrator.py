@@ -232,7 +232,7 @@ class StateMachine:
 
     def _build_transitions(self) -> Dict[tuple, State]:
         # Définit toutes les transitions possibles.
-        return {
+        transitions = {
             # IDLE
             (State.IDLE, Event.PERSON_DETECTED): State.GREETING,
 
@@ -303,8 +303,10 @@ class StateMachine:
         # Ajouter transitions d'erreur depuis tous les états
         for state in State:
             if state != State.ERROR:
-                self._transitions[(state, Event.ERROR_OCCURRED)] = State.ERROR
-                self._transitions[(state, Event.NETWORK_ERROR)] = State.ERROR
+                transitions[(state, Event.ERROR_OCCURRED)] = State.ERROR
+                transitions[(state, Event.NETWORK_ERROR)] = State.ERROR
+
+        return transitions
 
     @property
     def state(self) -> State:

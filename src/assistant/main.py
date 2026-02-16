@@ -481,6 +481,7 @@ Exemples:
 async def main():
     # Point d'entree principal.
     args = parse_args()
+    default_config_path = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
 
     # Determiner la configuration
     if args.config:
@@ -492,6 +493,8 @@ async def main():
     elif args.test:
         from assistant.config import get_test_config
         config = get_test_config()
+    elif default_config_path.exists():
+        config = Config.load(str(default_config_path))
     else:
         config = get_development_config()
 
