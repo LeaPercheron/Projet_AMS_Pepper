@@ -145,6 +145,21 @@
         <div class="advice-container">
             <h2>Conseils capillaires</h2>
 
+            <div class="detail-section">
+                <h3>Question à Pepper (mode secours)</h3>
+                <p>Si la voix temps réel est indisponible, tapez une question ici.</p>
+                <textarea
+                    id="fallback-question-input"
+                    rows="3"
+                    placeholder="Ex: Ce shampooing convient-il aux cheveux secs et colorés ?"
+                ></textarea>
+                <div class="product-buttons">
+                    <button class="primary-btn" onclick="App.askFallbackQuestion()">
+                        Envoyer la question
+                    </button>
+                </div>
+            </div>
+
             <div class="filter-section">
                 <p class="filter-label">Filtrer par type de cheveux :</p>
                 <div class="filter-buttons" id="filter-buttons">

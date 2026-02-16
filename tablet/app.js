@@ -35,7 +35,8 @@ const AppState = {
     filteredProducts: [],
     currentProduct: null,
     top3Results: [],
-    currentFilter: 'all'
+    currentFilter: 'all',
+    fallbackQuestionPending: false
 };
 
 const App = {
@@ -101,6 +102,28 @@ const App = {
                 this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
             }
         }, CONFIG.scanTimeout);
+    },
+
+    /**
+     * Envoyer une question en mode fallback (HTTP).
+     */
+    askFallbackQuestion() {
+        const input = document.getElementById('fallback-question-input');
+        const question = (input?.value || '').trim();
+
+        if (!question) {
+            this.showError('Veuillez saisir une question.');
+            return;
+        }
+
+        const sent = this.sendCommand('ask_question', { question });
+        if (!sent) {
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
+
+        AppState.fallbackQuestionPending = true;
+        this.showLoading('Pepper prépare une réponse...');
     },
 
     /**
@@ -351,6 +374,11 @@ const App = {
                 case 'products_list':
                     AppState.products = message.products;
                     this.filterProducts('all');
+                    break;
+
+                case 'qa_answer':
+                    AppState.fallbackQuestionPending = false;
+                    this.showSecurityMessage('Réponse Pepper', message.answer || 'Réponse vide');
                     break;
 
                 default:

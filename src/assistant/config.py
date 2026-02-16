@@ -24,6 +24,8 @@ class OpenAIConfig:
     # Configuration OpenAI Realtime API.
     api_key: str = ""
     model: str = "gpt-4o-realtime-preview-2024-12-17"
+    http_fallback_model: str = "gpt-4o-mini"
+    http_transcription_model: str = "whisper-1"
     voice: str = "shimmer"
     temperature: float = 0.8
     max_response_tokens: int = 4096

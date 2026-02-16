@@ -50,6 +50,8 @@ audio:
 # OpenAI Realtime API
 openai:
   model: gpt-4o-realtime-preview-2024-12-17
+  http_fallback_model: gpt-4o-mini
+  http_transcription_model: whisper-1
   voice: shimmer  # nova, shimmer, alloy, echo, fable, onyx
 
   # VAD (Voice Activity Detection)

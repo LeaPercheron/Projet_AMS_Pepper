@@ -6,6 +6,8 @@ import argparse
 import signal
 import sys
 import os
+import socket
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -35,7 +37,7 @@ from assistant.logger import SystemLogger, LogEvent, get_logger
 class PepperAssistant:
     # Assistant Parapharmacie Robotique - Systeme Integre.
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, tablet_url_override: str = ""):
         # Initialise l'objet.
         self.config = config
         self.logger = SystemLogger(
@@ -49,6 +51,8 @@ class PepperAssistant:
         self.adapter = None
         self.orchestrator = None
         self.openai_client = None
+        self.http_fallback_client = None
+        self.voice_fallback = None
         self.vision_pipeline = None
         self.database = None
         self.security_module = None
@@ -58,6 +62,8 @@ class PepperAssistant:
         self._running = False
         self._tasks = []
         self._shutdown_event = asyncio.Event()
+        self._main_loop = None
+        self._tablet_url_override = (tablet_url_override or "").strip()
 
     async def setup(self):
         # Initialise tous les modules.
@@ -81,6 +87,10 @@ class PepperAssistant:
         await self._setup_tablet()
 
         await self._setup_orchestrator()
+
+        await self._setup_voice_fallback()
+
+        await self._setup_tablet_handlers()
 
         self.logger.log_event(LogEvent.CONFIG_LOADED, {
             "modules_loaded": self._get_loaded_modules()
@@ -189,6 +199,32 @@ class PepperAssistant:
 
         self.logger.log_info("Chargement module audio...")
 
+        # Préparer le fallback HTTP (même si Realtime est indisponible).
+        try:
+            from assistant.llm import OpenAIHTTPFallbackClient
+
+            if self.config.openai.api_key:
+                fallback_model = (
+                    os.getenv("OPENAI_HTTP_FALLBACK_MODEL", "").strip()
+                    or self.config.openai.http_fallback_model
+                )
+                self.http_fallback_client = OpenAIHTTPFallbackClient(
+                    api_key=self.config.openai.api_key,
+                    model=fallback_model
+                )
+                self.logger.log_info(f"  OpenAI HTTP fallback: {fallback_model}")
+            else:
+                self.logger.log_warning("  OpenAI: Pas de cle API configuree")
+        except ImportError as e:
+            self.logger.log_warning(f"Module fallback HTTP non disponible: {e}")
+        except Exception as e:
+            self.logger.log_warning(f"  Fallback HTTP non initialisé: {e}")
+
+        disable_realtime = os.getenv("OPENAI_REALTIME_DISABLED", "").strip().lower()
+        if disable_realtime in {"1", "true", "yes", "on"}:
+            self.logger.log_warning("  OpenAI Realtime desactive via OPENAI_REALTIME_DISABLED")
+            return
+
         try:
             from assistant.realtime import OpenAIRealtimeClient, RealtimeConfig
 
@@ -201,8 +237,6 @@ class PepperAssistant:
 
                 self.openai_client = OpenAIRealtimeClient(realtime_config)
                 self.logger.log_info(f"  OpenAI Realtime: {self.config.openai.model}")
-            else:
-                self.logger.log_warning("  OpenAI: Pas de cle API configuree")
 
         except ImportError as e:
             self.logger.log_warning(f"Module OpenAI non disponible: {e}")
@@ -278,6 +312,157 @@ class PepperAssistant:
         except Exception as e:
             self.logger.log_error("Erreur chargement orchestrateur", exception=e)
 
+    async def _setup_voice_fallback(self):
+        # Configure le fallback vocal HTTP (micro -> transcription -> réponse -> TTS).
+        if not self.http_fallback_client or not self.adapter or not self.orchestrator:
+            return
+        try:
+            from assistant.llm import HTTPVoiceFallback, VoiceFallbackConfig
+
+            transcription_model = (
+                os.getenv("OPENAI_HTTP_TRANSCRIPTION_MODEL", "").strip()
+                or self.config.openai.http_transcription_model
+            )
+
+            input_sr = getattr(getattr(self.adapter, "config", None), "sample_rate", None)
+            if not input_sr:
+                input_sr = self.config.audio.input_sample_rate
+
+            input_ch = getattr(getattr(self.adapter, "config", None), "channels_in", None)
+            if not input_ch:
+                input_ch = self.config.audio.input_channels
+
+            vf_config = VoiceFallbackConfig(
+                input_sample_rate=int(input_sr),
+                input_channels=int(input_ch),
+                transcription_model=transcription_model
+            )
+
+            def _speak_blocking(answer_text: str):
+                if self.adapter and hasattr(self.adapter, "say"):
+                    # Bloquant pour réduire l'auto-capture.
+                    self.adapter.say(answer_text, True)
+
+            self.voice_fallback = HTTPVoiceFallback(
+                api_key=self.config.openai.api_key,
+                text_client=self.http_fallback_client,
+                speak_callback=_speak_blocking,
+                context_provider=lambda: self.orchestrator.get_context() if self.orchestrator else {},
+                on_transcript=self._on_voice_fallback_transcript,
+                on_answer=self._on_voice_fallback_answer,
+                config=vf_config
+            )
+            self.voice_fallback.start()
+            self.orchestrator.set_fallback_audio_handler(self.voice_fallback.ingest)
+            self.logger.log_info(
+                f"  Fallback vocal HTTP: actif (transcription={transcription_model})"
+            )
+        except Exception as e:
+            self.logger.log_warning(f"  Fallback vocal HTTP non initialisé: {e}")
+
+    def _on_voice_fallback_transcript(self, transcript: str):
+        # Callback thread-safe: transcription utilisateur via fallback vocal.
+        if not transcript:
+            return
+        if self.orchestrator:
+            try:
+                from assistant.orchestrator import Event
+                self.orchestrator.send_event_sync(
+                    Event.QUESTION_ASKED,
+                    {"text": transcript, "source": "http_voice_fallback"}
+                )
+            except Exception:
+                pass
+
+    def _on_voice_fallback_answer(self, transcript: str, answer: str):
+        # Callback thread-safe: publier la réponse sur tablette (si connectée).
+        if not self.tablet_server or not self._main_loop:
+            return
+        try:
+            if hasattr(self.tablet_server, "send_qa_answer"):
+                fut = asyncio.run_coroutine_threadsafe(
+                    self.tablet_server.send_qa_answer(True, transcript, answer),
+                    self._main_loop
+                )
+                fut.result(timeout=2.0)
+        except Exception:
+            pass
+
+    async def _setup_tablet_handlers(self):
+        # Branche les commandes tablette custom (fallback Q/R).
+        if not self.tablet_server:
+            return
+        try:
+            self.tablet_server.register_handler("ask_question", self._handle_tablet_ask_question)
+            self.logger.log_info("  Tablette: handler ask_question actif")
+        except Exception as e:
+            self.logger.log_warning(f"  Tablette: handler ask_question indisponible ({e})")
+
+    def _is_realtime_connected(self) -> bool:
+        return bool(self.openai_client and self.openai_client.is_connected())
+
+    async def _handle_tablet_ask_question(self, websocket, data):
+        # Fallback Q/R: question texte tablette -> OpenAI HTTP -> TTS Pepper.
+        question = ((data or {}).get("question") or "").strip()
+        if not question:
+            await self.tablet_server._send_error(websocket, "Question vide.")
+            return
+
+        # Fallback actif uniquement si Realtime est indisponible.
+        if self._is_realtime_connected():
+            await self.tablet_server._send_error(
+                websocket,
+                "Realtime actif: utilisez la conversation vocale."
+            )
+            return
+
+        if not self.http_fallback_client:
+            await self.tablet_server._send_error(
+                websocket,
+                "Fallback HTTP indisponible (clé API ou dépendance manquante)."
+            )
+            return
+
+        try:
+            context = self.orchestrator.get_context() if self.orchestrator else {}
+
+            if self.orchestrator:
+                try:
+                    from assistant.orchestrator import Event
+                    await self.orchestrator.send_event(
+                        Event.QUESTION_ASKED,
+                        {"text": question, "source": "tablet"}
+                    )
+                except Exception:
+                    pass
+
+            answer = await asyncio.to_thread(self.http_fallback_client.ask, question, context)
+
+            if self.adapter and hasattr(self.adapter, "say"):
+                await asyncio.to_thread(self.adapter.say, answer, False)
+
+            if hasattr(self.tablet_server, "send_qa_answer"):
+                await self.tablet_server.send_qa_answer(websocket, question, answer)
+            else:
+                await self.tablet_server.send_security_alert(websocket, "Réponse Pepper", answer)
+
+            if self.orchestrator:
+                try:
+                    from assistant.orchestrator import Event
+                    await self.orchestrator.send_event(
+                        Event.SPEECH_ENDED,
+                        {"source": "http_fallback"}
+                    )
+                except Exception:
+                    pass
+
+        except Exception as e:
+            self.logger.log_error("Erreur fallback HTTP question", exception=e)
+            await self.tablet_server._send_error(
+                websocket,
+                "Erreur fallback HTTP lors du traitement de la question."
+            )
+
     def _get_loaded_modules(self) -> list:
         # Retourne la liste des modules charges.
         modules = []
@@ -291,6 +476,10 @@ class PepperAssistant:
             modules.append("vision")
         if self.openai_client:
             modules.append("openai")
+        if self.http_fallback_client:
+            modules.append("openai_http_fallback")
+        if self.voice_fallback:
+            modules.append("voice_http_fallback")
         if self.tablet_server:
             modules.append("tablet")
         if self.orchestrator:
@@ -300,6 +489,7 @@ class PepperAssistant:
     async def run(self):
         # Lance le systeme complet.
         self._running = True
+        self._main_loop = asyncio.get_running_loop()
         session_id = self.logger.start_session()
 
         self.logger.log_info("=" * 50)
@@ -332,6 +522,12 @@ class PepperAssistant:
                     self._run_openai_client(),
                     name="openai_client"
                 ))
+
+            # Afficher la tablette Pepper automatiquement.
+            self._tasks.append(asyncio.create_task(
+                self._auto_show_tablet(),
+                name="auto_show_tablet"
+            ))
 
             self.logger.log_info(f"Demarrage de {len(self._tasks)} taches paralleles")
 
@@ -368,8 +564,83 @@ class PepperAssistant:
                 # Boucle de maintien connexion
                 while self._running:
                     await asyncio.sleep(1)
+            else:
+                self.logger.log_warning("Client OpenAI Realtime indisponible")
+                if self.voice_fallback:
+                    self.logger.log_warning(
+                        "Fallback vocal HTTP actif (micro Pepper + transcription HTTP)"
+                    )
+                elif self.http_fallback_client:
+                    self.logger.log_warning(
+                        "Fallback HTTP actif via tablette (commande ask_question)"
+                    )
         except Exception as e:
             self.logger.log_error("Erreur client OpenAI", exception=e)
+
+    def _resolve_local_ip_for_pepper(self) -> str:
+        # Déduit l'IP locale utile pour joindre Pepper.
+        pepper_ip = (self.config.pepper.ip or "").strip()
+        if not pepper_ip:
+            return "127.0.0.1"
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect((pepper_ip, int(self.config.pepper.port or 9559)))
+            local_ip = sock.getsockname()[0]
+            sock.close()
+            if local_ip:
+                return local_ip
+        except Exception:
+            pass
+        return "127.0.0.1"
+
+    def _resolve_tablet_url(self) -> str:
+        # URL tablette à afficher sur Pepper.
+        env_url = (os.getenv("PEPPER_TABLET_URL", "") or os.getenv("TABLET_URL", "")).strip()
+        if self._tablet_url_override:
+            return self._tablet_url_override
+        if env_url:
+            return env_url
+        local_ip = self._resolve_local_ip_for_pepper()
+        return f"http://{local_ip}:8080/index.html"
+
+    async def _auto_show_tablet(self):
+        # Tente d'afficher la webview tablette sur Pepper.
+        if not self.adapter or not hasattr(self.adapter, "show_on_tablet"):
+            return
+        if self.config.mode == RunMode.SIMULATION:
+            return
+
+        url = self._resolve_tablet_url()
+        ws_host = self.config.tablet.ws_host
+        ws_port = self.config.tablet.ws_port
+        if ws_host in ("0.0.0.0", "", None):
+            ws_host = self._resolve_local_ip_for_pepper()
+        self.logger.log_info(f"  URL tablette Pepper: {url}")
+        self.logger.log_info(f"  WS tablette attendu: ws://{ws_host}:{ws_port}")
+
+        # Vérifier localement que le serveur HTTP tablette est bien lancé.
+        try:
+            await asyncio.to_thread(urllib.request.urlopen, url, None, 1.5)
+        except Exception:
+            self.logger.log_warning(
+                "  Tablette HTTP non joignable localement. "
+                "Lance: cd tablet && python3 -m http.server 8080 --bind 0.0.0.0"
+            )
+
+        # Affichage Pepper avec retries courts.
+        for attempt in range(1, 4):
+            try:
+                ok = await asyncio.to_thread(self.adapter.show_on_tablet, url)
+                if ok:
+                    self.logger.log_info(f"  Tablette Pepper affichee (tentative {attempt})")
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(1.0)
+
+        self.logger.log_warning(
+            "  Impossible d'afficher la tablette sur Pepper automatiquement."
+        )
 
     async def shutdown(self):
         # Arrete proprement le systeme.
@@ -407,6 +678,13 @@ class PepperAssistant:
             except:
                 pass
 
+        if self.voice_fallback:
+            try:
+                self.voice_fallback.stop()
+            except:
+                pass
+            self.voice_fallback = None
+
         if self.adapter:
             try:
                 self.adapter.disconnect()
@@ -429,6 +707,7 @@ class PepperAssistant:
         })
 
         self.logger.log_info("Systeme arrete proprement")
+        self._main_loop = None
         self.logger.close()
 
     def request_shutdown(self):
@@ -470,6 +749,8 @@ Exemples:
                         help="Mode test (timeouts courts)")
     parser.add_argument("--pepper-ip", type=str, default="",
                         help="Adresse IP du robot Pepper")
+    parser.add_argument("--tablet-url", type=str, default="",
+                        help="URL web a afficher sur la tablette Pepper (optionnel)")
     parser.add_argument("--config", type=str,
                         help="Fichier de configuration YAML/JSON")
     parser.add_argument("--debug", action="store_true",
@@ -508,7 +789,7 @@ async def main():
         config.logging.file_level = "DEBUG"
 
     # Creer et demarrer l'assistant
-    assistant = PepperAssistant(config)
+    assistant = PepperAssistant(config, tablet_url_override=args.tablet_url)
 
     # Configurer les handlers de signaux
     setup_signal_handlers(assistant)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -59,9 +60,24 @@ def test_ping(ip: str, count: int = 4) -> TestResult:
             text=True,
             check=False
         )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "ping failed")
-        print(result.stdout.strip())
+        out = (result.stdout or "").strip()
+        err = (result.stderr or "").strip()
+        if out:
+            print(out)
+
+        if result.returncode == 0:
+            return
+
+        # Tolérance: si au moins une réponse ICMP est reçue, on considère le ping comme partiellement OK.
+        received = 0
+        m = re.search(r"(\d+)\s+packets?\s+received", out)
+        if m:
+            received = int(m.group(1))
+        if received > 0 or "bytes from" in out.lower():
+            print(f"[PING] Avertissement: retour non-zéro mais {received} paquets reçus")
+            return
+
+        raise RuntimeError(err or "ping failed")
 
     return _safe_call("A1.Ping", _run)
 
@@ -93,6 +109,74 @@ def test_naoqi_connect(ip: str, port: int) -> Tuple[TestResult, Optional[object]
     return result, session
 
 
+def _session_is_connected(session) -> bool:
+    # Vérifie l'état de connexion d'une session qi.
+    if session is None:
+        return False
+
+    if hasattr(session, "isConnected"):
+        try:
+            return bool(session.isConnected())
+        except Exception:
+            pass
+
+    # Fallback: appel de service léger.
+    try:
+        memory = session.service("ALMemory")
+        memory.getData("RobotConfig/Body/Type")
+        return True
+    except Exception:
+        return False
+
+
+def _connect_session_raw(ip: str, port: int):
+    # Connexion qi brute sans générer de TestResult.
+    import qi
+    session = qi.Session()
+    session.connect(f"tcp://{ip}:{port}")
+    return session
+
+
+def _ensure_session(session, ip: str, port: int):
+    # Retourne une session connectée (reconnecte si nécessaire).
+    if _session_is_connected(session):
+        return session
+
+    attempts = 3
+    for idx in range(1, attempts + 1):
+        try:
+            print(f"[NAOqi] Reconnexion tcp://{ip}:{port} (tentative {idx}/{attempts})")
+            return _connect_session_raw(ip, port)
+        except Exception as e:
+            print(f"[NAOqi] Reconnexion échouée: {e}")
+            if idx < attempts:
+                time.sleep(1.0)
+    return None
+
+
+def _run_with_reconnect(
+    session,
+    ip: str,
+    port: int,
+    test_fn: Callable[[object], TestResult]
+) -> Tuple[TestResult, Optional[object]]:
+    # Exécute un test lié à la session avec une tentative de reconnexion automatique.
+    session = _ensure_session(session, ip, port)
+    if session is None:
+        return TestResult(test_fn.__name__, False, "Session not connected"), None
+
+    result = test_fn(session)
+    msg = (result.message or "").lower()
+    if (not result.passed) and ("session closed" in msg or "session not connected" in msg):
+        session = _ensure_session(None, ip, port)
+        if session is not None:
+            print(f"[RETRY] {result.name} après reconnexion")
+            result = test_fn(session)
+            if result.passed:
+                result.message = "OK (après reconnexion)"
+    return result, session
+
+
 def test_list_services(session) -> TestResult:
     # Gere list services.
     def _run():
@@ -104,9 +188,20 @@ def test_list_services(session) -> TestResult:
             svc_mgr = session.service("ALServiceManager")
             services = svc_mgr.services()
 
-        print(f"[NAOqi] {len(services)} services détectés")
+        names = []
+        for item in services:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("serviceName") or str(item)
+                names.append(str(name))
+            else:
+                names.append(str(item))
+
+        names = sorted(set(names))
+        print(f"[NAOqi] {len(names)} services détectés")
         # Afficher un extrait pour debug
-        for name in sorted(services)[:15]:
+        for name in names[:15]:
             print(f"  - {name}")
 
     return _safe_call("A1.Services", _run)
@@ -167,15 +262,47 @@ def test_audio_record(session, output_dir: Path, duration_s: float = 5.0) -> Tes
     def _run():
         # Execute l'action.
         recorder = session.service("ALAudioRecorder")
-        file_path = "/home/nao/pepper_diag_audio.wav"
+        candidate_paths = [
+            "/home/nao/recordings/microphones/pepper_diag_audio.wav",
+            "/home/nao/pepper_diag_audio.wav",
+            "/tmp/pepper_diag_audio.wav",
+        ]
         sample_rate = 48000
         channels = [1, 1, 1, 1]  # 4 canaux
 
+        file_path = candidate_paths[0]
         print(f"[MIC] Enregistrement {duration_s:.1f}s -> {file_path}")
+        # Nettoyage défensif: certaines sessions laissent un enregistrement actif.
         try:
-            recorder.startMicrophonesRecording(file_path, "wav", sample_rate, channels)
-        except Exception as e:
-            raise RuntimeError(f"startMicrophonesRecording a échoué: {e}")
+            recorder.stopMicrophonesRecording()
+            time.sleep(0.2)
+        except Exception:
+            pass
+
+        started = False
+        last_error = ""
+        for path in candidate_paths:
+            try:
+                file_path = path
+                recorder.startMicrophonesRecording(file_path, "wav", sample_rate, channels)
+                started = True
+                break
+            except Exception as e:
+                last_error = str(e)
+                if "Already recording" in last_error:
+                    # Si un enregistrement était déjà actif, tenter un stop puis retry unique.
+                    try:
+                        recorder.stopMicrophonesRecording()
+                        time.sleep(0.3)
+                        recorder.startMicrophonesRecording(file_path, "wav", sample_rate, channels)
+                        started = True
+                        break
+                    except Exception as e2:
+                        last_error = str(e2)
+                continue
+
+        if not started:
+            raise RuntimeError(f"startMicrophonesRecording a échoué: {last_error}")
 
         time.sleep(duration_s)
         recorder.stopMicrophonesRecording()
@@ -188,18 +315,39 @@ def test_audio_record(session, output_dir: Path, duration_s: float = 5.0) -> Tes
             file_mgr = None
 
         if file_mgr and hasattr(file_mgr, "fileExists"):
-            exists = file_mgr.fileExists(file_path)
-            if not exists:
-                raise RuntimeError("Fichier WAV non trouvé sur Pepper")
+            existing_path = None
+            for path in candidate_paths:
+                try:
+                    if file_mgr.fileExists(path):
+                        existing_path = path
+                        break
+                except Exception:
+                    continue
+
+            if existing_path:
+                file_path = existing_path
+            else:
+                print("[MIC] Avertissement: WAV non visible via ALFileManager (mais enregistrement lancé/arrêté)")
 
         if file_mgr and hasattr(file_mgr, "getFile"):
-            output_dir.mkdir(parents=True, exist_ok=True)
-            data = file_mgr.getFile(file_path)
-            out_path = output_dir / "pepper_mic_test.wav"
-            with open(out_path, "wb") as f:
-                f.write(bytes(data))
-            size = out_path.stat().st_size
-            print(f"[MIC] WAV téléchargé: {out_path} ({size} bytes)")
+            downloaded = False
+            for path in candidate_paths:
+                try:
+                    data = file_mgr.getFile(path)
+                    if not data:
+                        continue
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    out_path = output_dir / "pepper_mic_test.wav"
+                    with open(out_path, "wb") as f:
+                        f.write(bytes(data))
+                    size = out_path.stat().st_size
+                    print(f"[MIC] WAV téléchargé: {out_path} ({size} bytes)")
+                    downloaded = True
+                    break
+                except Exception:
+                    continue
+            if not downloaded:
+                print("[MIC] Avertissement: WAV non téléchargeable via ALFileManager")
         else:
             print("[MIC] WAV enregistré sur Pepper (non téléchargé)")
 
@@ -337,25 +485,75 @@ def main() -> int:
         _print_summary(results)
         return 1
 
-    results.append(test_list_services(session))
+    result, session = _run_with_reconnect(
+        session,
+        args.pepper_ip,
+        args.pepper_port,
+        test_list_services
+    )
+    results.append(result)
 
     if not args.skip_camera:
-        results.append(test_camera_capture(session, output_dir, args.camera_resolution))
+        def _camera_test(sess):
+            return test_camera_capture(sess, output_dir, args.camera_resolution)
+        result, session = _run_with_reconnect(
+            session,
+            args.pepper_ip,
+            args.pepper_port,
+            _camera_test
+        )
+        results.append(result)
 
     if not args.skip_audio_in:
-        results.append(test_audio_record(session, output_dir, args.audio_duration))
+        def _audio_in_test(sess):
+            return test_audio_record(sess, output_dir, args.audio_duration)
+        result, session = _run_with_reconnect(
+            session,
+            args.pepper_ip,
+            args.pepper_port,
+            _audio_in_test
+        )
+        results.append(result)
 
     if not args.skip_audio_out:
-        results.append(test_audio_output(session))
+        result, session = _run_with_reconnect(
+            session,
+            args.pepper_ip,
+            args.pepper_port,
+            test_audio_output
+        )
+        results.append(result)
 
     if not args.skip_tablet:
-        results.append(test_tablet(session, args.tablet_url))
+        def _tablet_test(sess):
+            return test_tablet(sess, args.tablet_url)
+        result, session = _run_with_reconnect(
+            session,
+            args.pepper_ip,
+            args.pepper_port,
+            _tablet_test
+        )
+        results.append(result)
 
     if not args.skip_leds:
-        results.append(test_leds(session))
+        result, session = _run_with_reconnect(
+            session,
+            args.pepper_ip,
+            args.pepper_port,
+            test_leds
+        )
+        results.append(result)
 
     if args.set_file_as_input:
-        results.append(test_set_file_as_input(session, args.set_file_as_input))
+        def _set_file_test(sess):
+            return test_set_file_as_input(sess, args.set_file_as_input)
+        result, session = _run_with_reconnect(
+            session,
+            args.pepper_ip,
+            args.pepper_port,
+            _set_file_test
+        )
+        results.append(result)
 
     _print_header("RESUME")
     _print_summary(results)

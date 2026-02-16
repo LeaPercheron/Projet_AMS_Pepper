@@ -6,8 +6,10 @@ import base64
 import json
 import time
 import struct
+import inspect
 import threading
 import os
+import ssl
 from typing import Optional, Callable, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
@@ -86,6 +88,8 @@ class RealtimeConfig:
     auto_reconnect: bool = True
     max_reconnect_attempts: int = 5
     reconnect_delay_ms: int = 1000
+    disable_proxy: bool = True
+    proxy_url: str = ""
 
 
 @dataclass
@@ -200,6 +204,15 @@ class OpenAIRealtimeClient:
         # Charger API key depuis env si non fournie
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+        # Surcharge optionnelle via variables d'environnement.
+        env_disable_proxy = os.getenv("OPENAI_DISABLE_PROXY", "").strip().lower()
+        if env_disable_proxy in {"1", "true", "yes", "on"}:
+            self.config.disable_proxy = True
+        elif env_disable_proxy in {"0", "false", "no", "off"}:
+            self.config.disable_proxy = False
+
+        if not self.config.proxy_url:
+            self.config.proxy_url = os.getenv("OPENAI_WS_PROXY", "").strip()
 
         # État
         self.connection_state = ConnectionState.DISCONNECTED
@@ -317,13 +330,48 @@ class OpenAIRealtimeClient:
         try:
             logger.info(f"Connexion à {url}...")
 
-            self._ws = await websockets.connect(
-                url,
-                extra_headers=headers,
-                ping_interval=20,
-                ping_timeout=10,
-                close_timeout=5
-            )
+            connect_kwargs = {
+                "ping_interval": 20,
+                "ping_timeout": 10,
+                "close_timeout": 5,
+            }
+
+            # Force TLS moderne et stable (OpenAI requiert TLS >= 1.2).
+            tls_context = ssl.create_default_context()
+            tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            connect_kwargs["ssl"] = tls_context
+
+            # Compatibilité websockets: extra_headers (legacy) vs additional_headers (récent).
+            params = inspect.signature(websockets.connect).parameters
+            if "extra_headers" in params:
+                connect_kwargs["extra_headers"] = headers
+            else:
+                connect_kwargs["additional_headers"] = headers
+
+            # websockets >=15 active les proxies système par défaut (proxy=True).
+            # Sur certains réseaux (campus/entreprise), cela casse le handshake TLS.
+            if "proxy" in params:
+                if self.config.proxy_url:
+                    connect_kwargs["proxy"] = self.config.proxy_url
+                    logger.info("Connexion Realtime via proxy explicite")
+                elif self.config.disable_proxy:
+                    connect_kwargs["proxy"] = None
+                    logger.info("Connexion Realtime en direct (proxy desactive)")
+
+            try:
+                self._ws = await websockets.connect(url, **connect_kwargs)
+            except ssl.SSLError as tls_err:
+                msg = str(tls_err).lower()
+                # Certains réseaux cassent le handshake TLS 1.3: retry forcé en TLS 1.2.
+                if "handshake failure" in msg or "sslv3_alert_handshake_failure" in msg:
+                    logger.warning("Handshake TLS échoué, nouvelle tentative forcée en TLS1.2")
+                    tls12_context = ssl.create_default_context()
+                    tls12_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                    tls12_context.maximum_version = ssl.TLSVersion.TLSv1_2
+                    connect_kwargs["ssl"] = tls12_context
+                    self._ws = await websockets.connect(url, **connect_kwargs)
+                else:
+                    raise
 
             self._send_queue = asyncio.Queue()
 

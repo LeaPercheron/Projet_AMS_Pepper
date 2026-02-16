@@ -427,6 +427,7 @@ class Orchestrator:
         self._realtime_client = None
         self._robot_actions = None
         self._audio_processor = None
+        self._fallback_audio_handler = None
 
         # Micro-phrases pré-chargées
         self._phrases_cache: Dict[str, List[str]] = MICRO_PHRASES.copy()
@@ -488,6 +489,10 @@ class Orchestrator:
     def set_realtime_client(self, client):
         # Injecte le client OpenAI Realtime.
         self._realtime_client = client
+
+    def set_fallback_audio_handler(self, handler):
+        # Injecte un handler audio de fallback (quand Realtime est indisponible).
+        self._fallback_audio_handler = handler
 
     def set_robot_actions(self, actions):
         # Injecte les actions robot.
@@ -771,6 +776,11 @@ class Orchestrator:
 
     def _on_realtime_error(self, error_msg: str):
         # Callback erreur réseau / API Realtime.
+        # En phase IDLE, ne pas casser la session globale si Realtime est indisponible:
+        # on garde vision/tablette/robot opérationnels et on retentera la connexion.
+        if self.state_machine.state == State.IDLE:
+            logger.warning(f"Realtime indisponible en IDLE: {error_msg}")
+            return
         self.send_event_sync(Event.NETWORK_ERROR, {"error": error_msg})
 
     def _enqueue_audio_data(self, audio_data: bytes):
@@ -1035,6 +1045,11 @@ class Orchestrator:
                             except Exception as e:
                                 logger.error(f"Erreur processing audio: {e}")
                         self._realtime_client.send_audio(payload)
+                    elif self._fallback_audio_handler:
+                        try:
+                            self._fallback_audio_handler(audio_data)
+                        except Exception as e:
+                            logger.error(f"Erreur fallback audio: {e}")
 
             except asyncio.TimeoutError:
                 pass

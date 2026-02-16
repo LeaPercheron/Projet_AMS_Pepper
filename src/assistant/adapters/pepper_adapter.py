@@ -4,6 +4,8 @@ import socket
 import struct
 import threading
 import time
+import io
+import wave
 from typing import Optional, Callable
 from .base import RobotAdapter, AdapterConfig, LEDColor
 
@@ -31,6 +33,8 @@ class PepperAdapter(RobotAdapter):
         self._memory_service = None
         self._tablet_service = None
         self._motion_service = None
+        self._audio_recorder_service = None
+        self._file_manager_service = None
 
         # Sockets audio
         self._audio_capture_socket: Optional[socket.socket] = None
@@ -45,6 +49,7 @@ class PepperAdapter(RobotAdapter):
         self._is_capturing = False
         self._is_playing = False
         self._is_streaming_video = False
+        self._audio_pull_mode = False
         self._audio_callback: Optional[Callable] = None
         self._video_callback: Optional[Callable] = None
 
@@ -80,6 +85,16 @@ class PepperAdapter(RobotAdapter):
                 self._motion_service = self._session.service("ALMotion")
             except:
                 print("[Pepper] Service motion non disponible")
+
+            try:
+                self._audio_recorder_service = self._session.service("ALAudioRecorder")
+            except:
+                print("[Pepper] Service audio recorder non disponible")
+
+            try:
+                self._file_manager_service = self._session.service("ALFileManager")
+            except:
+                print("[Pepper] Service file manager non disponible")
 
             self._is_connected = True
             print("[Pepper] Connecte avec succes")
@@ -118,8 +133,9 @@ class PepperAdapter(RobotAdapter):
 
         self._audio_callback = callback
         self._is_capturing = True
+        self._audio_pull_mode = False
 
-        # Configurer capture
+        # Mode 1 (historique): flux custom via ALAudioDevice + socket.
         try:
             self._audio_service.setClientPreferences(
                 "PepperAssistant",
@@ -128,18 +144,81 @@ class PepperAdapter(RobotAdapter):
                 0  # Interleaved
             )
             self._audio_service.subscribe("PepperAssistant")
+            self._capture_thread = threading.Thread(
+                target=self._audio_capture_loop,
+                daemon=True
+            )
+            self._capture_thread.start()
+            print("[Pepper] Capture audio demarree")
+            return True
         except Exception as e:
             print(f"[Pepper] Erreur config audio: {e}")
+            # Mode 2 (fallback): chunks WAV via ALAudioRecorder.
+            if not self._audio_recorder_service:
+                self._is_capturing = False
+                return False
+            self._audio_pull_mode = True
+            self._capture_thread = threading.Thread(
+                target=self._audio_capture_pull_loop,
+                daemon=True
+            )
+            self._capture_thread.start()
+            print("[Pepper] Capture audio fallback ALAudioRecorder demarree")
+            return True
 
-        # Thread de capture via socket
-        self._capture_thread = threading.Thread(
-            target=self._audio_capture_loop,
-            daemon=True
-        )
-        self._capture_thread.start()
+    def _audio_capture_pull_loop(self):
+        # Fallback: enregistre de petits WAV puis renvoie PCM brut au callback.
+        while self._is_capturing:
+            try:
+                wav_bytes = self._pull_audio_chunk_wav(duration_s=0.6)
+                if not wav_bytes:
+                    time.sleep(0.2)
+                    continue
+                pcm_bytes = self._wav_to_pcm(wav_bytes)
+                if pcm_bytes and self._audio_callback:
+                    self._audio_callback(pcm_bytes)
+            except Exception as e:
+                if self._is_capturing:
+                    print(f"[Pepper] Erreur capture fallback: {e}")
+                time.sleep(0.3)
 
-        print("[Pepper] Capture audio demarree")
-        return True
+    def _pull_audio_chunk_wav(self, duration_s: float = 0.6) -> bytes:
+        if not self._audio_recorder_service:
+            return b""
+
+        robot_path = "/home/nao/pepper_capture_chunk.wav"
+        try:
+            self._audio_recorder_service.startMicrophonesRecording(
+                robot_path,
+                "wav",
+                self.config.sample_rate,
+                [1, 1, 1, 1]
+            )
+            time.sleep(max(0.2, duration_s))
+            self._audio_recorder_service.stopMicrophonesRecording()
+        except Exception:
+            try:
+                self._audio_recorder_service.stopMicrophonesRecording()
+            except Exception:
+                pass
+            return b""
+
+        # Télécharger via ALFileManager si disponible.
+        if self._file_manager_service and hasattr(self._file_manager_service, "getFile"):
+            try:
+                data = self._file_manager_service.getFile(robot_path)
+                return bytes(data)
+            except Exception:
+                return b""
+        return b""
+
+    @staticmethod
+    def _wav_to_pcm(wav_bytes: bytes) -> bytes:
+        try:
+            with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+                return wf.readframes(wf.getnframes())
+        except Exception:
+            return b""
 
     def _audio_capture_loop(self):
         # Boucle de capture audio.
@@ -199,10 +278,15 @@ class PepperAdapter(RobotAdapter):
         # Arrete la capture audio.
         self._is_capturing = False
 
-        if self._audio_service:
+        if self._audio_service and not self._audio_pull_mode:
             try:
                 self._audio_service.unsubscribe("PepperAssistant")
             except:
+                pass
+        if self._audio_pull_mode and self._audio_recorder_service:
+            try:
+                self._audio_recorder_service.stopMicrophonesRecording()
+            except Exception:
                 pass
 
         if self._capture_thread:
@@ -213,6 +297,7 @@ class PepperAdapter(RobotAdapter):
             self._audio_capture_socket.close()
             self._audio_capture_socket = None
 
+        self._audio_pull_mode = False
         print("[Pepper] Capture audio arretee")
 
     def play_audio(self, audio_bytes: bytes) -> bool:
@@ -238,7 +323,25 @@ class PepperAdapter(RobotAdapter):
         except Exception as e:
             print(f"[Pepper] Erreur playback: {e}")
             self._audio_playback_socket = None
+            return self._play_audio_naoqi(audio_bytes)
+
+    def _play_audio_naoqi(self, audio_bytes: bytes) -> bool:
+        # Fallback playback direct via ALAudioDevice.
+        if not self._audio_service or not audio_bytes:
             return False
+        attempts = [
+            (audio_bytes, self.config.channels_out, self.config.sample_rate),
+            (self.config.channels_out, self.config.sample_rate, audio_bytes),
+            (self.config.sample_rate, self.config.channels_out, audio_bytes),
+            (self.config.sample_rate, audio_bytes, self.config.channels_out),
+        ]
+        for args in attempts:
+            try:
+                self._audio_service.sendRemoteBufferToOutput(*args)
+                return True
+            except Exception:
+                continue
+        return False
 
     def stop_audio_playback(self):
         # Arrete la lecture audio.
@@ -365,10 +468,13 @@ class PepperAdapter(RobotAdapter):
             return False
 
         try:
-            if blocking:
+            if not blocking and hasattr(self._tts_service, "post"):
+                self._tts_service.post.say(text)
+            elif blocking:
                 self._tts_service.say(text)
             else:
-                self._tts_service.post.say(text)
+                # Certaines versions qi n'exposent pas .post.
+                self._tts_service.say(text)
             return True
         except Exception as e:
             print(f"[Pepper] Erreur TTS: {e}")

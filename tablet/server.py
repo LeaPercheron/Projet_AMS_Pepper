@@ -47,6 +47,7 @@ class MessageType(Enum):
     SHOW_SCREEN = "show_screen"
     PRODUCTS_LIST = "products_list"
     STATUS = "status"
+    QA_ANSWER = "qa_answer"
 
 
 class TabletCommand(Enum):
@@ -58,6 +59,7 @@ class TabletCommand(Enum):
     SELECT_TOP3 = "select_top3"
     GET_PRODUCTS = "get_products"
     GO_HOME = "go_home"
+    ASK_QUESTION = "ask_question"
 
 
 
@@ -121,6 +123,7 @@ class TabletServer:
             TabletCommand.SELECT_TOP3.value: self._handle_select_top3,
             TabletCommand.GET_PRODUCTS.value: self._handle_get_products,
             TabletCommand.GO_HOME.value: self._handle_go_home,
+            TabletCommand.ASK_QUESTION.value: self._handle_ask_question,
         }
 
     def register_handler(self, command: str, handler: Callable):
@@ -261,6 +264,14 @@ class TabletServer:
             "screen": "home"
         })
 
+    async def _handle_ask_question(self, websocket, data: Dict):
+        # Handler par défaut: surchargé par l'assistant principal si fallback activé.
+        self.logger.info("Question fallback reçue (handler par défaut)")
+        await self._send_error(
+            websocket,
+            "Mode question fallback non configuré côté assistant."
+        )
+
 
     async def _send_to_client(self, websocket: WebSocketServerProtocol, message: Dict):
         # Envoie un message à un client spécifique.
@@ -369,6 +380,18 @@ class TabletServer:
             "products": [p.to_dict() if isinstance(p, Product) else p for p in products]
         }
 
+        if websocket_or_broadcast is True:
+            await self.broadcast(message)
+        else:
+            await self._send_to_client(websocket_or_broadcast, message)
+
+    async def send_qa_answer(self, websocket_or_broadcast, question: str, answer: str):
+        # Envoie une réponse au mode question fallback.
+        message = {
+            "type": MessageType.QA_ANSWER.value,
+            "question": question,
+            "answer": answer
+        }
         if websocket_or_broadcast is True:
             await self.broadcast(message)
         else:

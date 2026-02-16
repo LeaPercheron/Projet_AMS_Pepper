@@ -56,3 +56,4 @@
 {"timestamp": "2026-02-16T09:36:53.701870", "level": "INFO", "event": "session_end", "data": {"session_id": "20260216_093646", "duration_sec": 6.8, "stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260216_093646"}
 {"timestamp": "2026-02-16T09:36:53.702533", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
 {"timestamp": "2026-02-16T09:36:53.703541", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-02-16T15:43:44.231688", "level": "INFO", "event": "info", "data": {"message": "  Fallback vocal HTTP: actif (transcription=whisper-1)"}}

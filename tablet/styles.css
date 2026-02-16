@@ -510,6 +510,18 @@ html, body {
     margin-bottom: 20px;
 }
 
+#fallback-question-input {
+    width: 100%;
+    min-height: 90px;
+    border: 2px solid var(--primary-color);
+    border-radius: var(--border-radius-md);
+    padding: 12px;
+    font-size: 1rem;
+    resize: vertical;
+    margin-top: 10px;
+    margin-bottom: 12px;
+}
+
 .filter-section {
     width: 100%;
     margin-bottom: 25px;
