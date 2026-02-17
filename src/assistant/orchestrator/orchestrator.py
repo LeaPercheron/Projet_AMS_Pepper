@@ -451,6 +451,9 @@ class Orchestrator:
 
         # Entrée dans SCANNING_PRODUCT
         self.state_machine.on_enter(State.SCANNING_PRODUCT, self._on_enter_scanning)
+        self.state_machine.on_enter(State.SCANNING_BARCODE, self._on_enter_scanning)
+        self.state_machine.on_exit(State.SCANNING_PRODUCT, self._on_exit_scanning)
+        self.state_machine.on_exit(State.SCANNING_BARCODE, self._on_exit_scanning)
 
         # Entrée dans DISPLAYING_INFO
         self.state_machine.on_enter(State.DISPLAYING_INFO, self._on_enter_displaying)
@@ -516,7 +519,20 @@ class Orchestrator:
         # Début du scan produit.
         asyncio.create_task(self._play_phrase("looking"))
         asyncio.create_task(self._set_leds(LED_COLORS[State.SCANNING_PRODUCT]))
+        if self._robot_actions and hasattr(self._robot_actions, "freeze_head"):
+            try:
+                self._robot_actions.freeze_head()
+            except Exception as e:
+                logger.debug(f"freeze_head indisponible: {e}")
         self._stats["products_scanned"] += 1
+
+    def _on_exit_scanning(self, state: State, event: Event):
+        # Fin de phase de scan: restaurer la tête.
+        if self._robot_actions and hasattr(self._robot_actions, "unfreeze_head"):
+            try:
+                self._robot_actions.unfreeze_head()
+            except Exception as e:
+                logger.debug(f"unfreeze_head indisponible: {e}")
 
     def _on_enter_displaying(self, state: State, event: Event):
         # Affichage info produit.

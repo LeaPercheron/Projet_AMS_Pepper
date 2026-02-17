@@ -35,8 +35,7 @@ const AppState = {
     filteredProducts: [],
     currentProduct: null,
     top3Results: [],
-    currentFilter: 'all',
-    fallbackQuestionPending: false
+    currentFilter: 'all'
 };
 
 const App = {
@@ -74,6 +73,9 @@ const App = {
         if (screen) {
             screen.classList.add('active');
             AppState.currentScreen = screenId;
+            if (screenId === 'barcode-scan') {
+                this.updateBarcodeStatus('waiting', 'En attente du code-barres...');
+            }
         }
     },
 
@@ -93,7 +95,12 @@ const App = {
         this.showLoading('Analyse du produit en cours...');
 
         // Envoyer commande au serveur
-        this.sendCommand('start_visual_scan');
+        const sent = this.sendCommand('start_visual_scan');
+        if (!sent) {
+            this.showScreen('scan-choice');
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
 
         // Timeout de sécurité
         setTimeout(() => {
@@ -105,25 +112,37 @@ const App = {
     },
 
     /**
-     * Envoyer une question en mode fallback (HTTP).
+     * Démarrer le scan code-barres
      */
-    askFallbackQuestion() {
-        const input = document.getElementById('fallback-question-input');
-        const question = (input?.value || '').trim();
+    startBarcodeScan() {
+        this.log('Démarrage scan code-barres');
+        this.showScreen('barcode-scan');
+        this.updateBarcodeStatus('waiting', 'Recherche du code-barres...');
 
-        if (!question) {
-            this.showError('Veuillez saisir une question.');
-            return;
-        }
-
-        const sent = this.sendCommand('ask_question', { question });
+        const sent = this.sendCommand('start_barcode_scan');
         if (!sent) {
             this.showError('Connexion tablette indisponible.');
             return;
         }
 
-        AppState.fallbackQuestionPending = true;
-        this.showLoading('Pepper prépare une réponse...');
+        setTimeout(() => {
+            if (AppState.currentScreen === 'barcode-scan') {
+                this.updateBarcodeStatus('error', 'Le scan a pris trop de temps. Réessayez.');
+            }
+        }, CONFIG.scanTimeout);
+    },
+
+    /**
+     * Démarrer une question vocale fallback
+     */
+    startVoiceQuestion() {
+        this.log('Démarrage question vocale fallback');
+        const sent = this.sendCommand('start_voice_question', { duration_s: 9 });
+        if (!sent) {
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
+        this.showLoading('Parlez, Pepper vous écoute...');
     },
 
     /**
@@ -162,7 +181,7 @@ const App = {
         if (result) {
             this.log(`Produit sélectionné: ${result.name}`);
             this.sendCommand('confirm_product', { ean: result.ean, index: index });
-            this.showProduct(result);
+            this.showLoading('Validation du produit...');
         }
     },
 
@@ -287,11 +306,13 @@ const App = {
             AppState.ws.onopen = () => {
                 this.log('WebSocket connecté');
                 AppState.connected = true;
+                this.updateConnectionStatus('Connecté');
             };
 
             AppState.ws.onclose = () => {
                 this.log('WebSocket déconnecté');
                 AppState.connected = false;
+                this.updateConnectionStatus('Déconnecté');
 
                 // Tentative de reconnexion après 5s
                 setTimeout(() => this.connectWebSocket(), 5000);
@@ -299,6 +320,7 @@ const App = {
 
             AppState.ws.onerror = (error) => {
                 this.log('Erreur WebSocket', error);
+                this.updateConnectionStatus('Erreur');
             };
 
             AppState.ws.onmessage = (event) => {
@@ -376,8 +398,15 @@ const App = {
                     this.filterProducts('all');
                     break;
 
+                case 'status':
+                    this.updateConnectionStatus(
+                        message.status === 'connected'
+                            ? 'Connecté'
+                            : (message.status || 'Inconnu')
+                    );
+                    break;
+
                 case 'qa_answer':
-                    AppState.fallbackQuestionPending = false;
                     this.showSecurityMessage('Réponse Pepper', message.answer || 'Réponse vide');
                     break;
 
@@ -387,6 +416,16 @@ const App = {
 
         } catch (error) {
             this.log('Erreur parsing message:', error);
+        }
+    },
+
+    /**
+     * Mettre à jour le statut WebSocket affiché
+     */
+    updateConnectionStatus(statusText) {
+        const statusEl = document.getElementById('ws-status');
+        if (statusEl) {
+            statusEl.textContent = `WebSocket: ${statusText}`;
         }
     },
 
@@ -502,9 +541,19 @@ const App = {
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+function bootstrapApp() {
+    if (window.__PEPPER_APP_BOOTSTRAPPED__) {
+        return;
+    }
+    window.__PEPPER_APP_BOOTSTRAPPED__ = true;
     App.init();
-});
+}
 
 // Exposer l'application globalement pour les onclick HTML
 window.App = App;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrapApp);
+} else {
+    bootstrapApp();
+}

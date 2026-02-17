@@ -29,6 +29,8 @@ class VoiceFallbackConfig:
     queue_max_chunks: int = 256
     transcription_model: str = "whisper-1"
     language: str = "fr"
+    manual_trigger: bool = False
+    listen_window_s: float = 8.0
 
 
 class HTTPVoiceFallback:
@@ -64,6 +66,7 @@ class HTTPVoiceFallback:
         self._silence_s = 0.0
         self._noise_floor = 0.005
         self._mute_until = 0.0
+        self._listen_until = 0.0 if self.config.manual_trigger else float("inf")
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -93,11 +96,28 @@ class HTTPVoiceFallback:
             except Exception:
                 pass
 
+    def arm_listen_window(self, duration_s: Optional[float] = None):
+        # Active une fenêtre d'écoute temporaire (mode manuel).
+        if not self.config.manual_trigger:
+            return
+        window = float(duration_s or self.config.listen_window_s)
+        self._listen_until = time.time() + max(0.5, window)
+        self._reset_vad_state()
+        self._drain_queue(max_items=128)
+
+    def is_listen_window_open(self) -> bool:
+        if not self.config.manual_trigger:
+            return True
+        return time.time() <= self._listen_until
+
     def _run_loop(self):
         while not self._stop_event.is_set():
             try:
                 chunk = self._queue.get(timeout=0.2)
             except queue.Empty:
+                continue
+
+            if self.config.manual_trigger and time.time() > self._listen_until:
                 continue
 
             if time.time() < self._mute_until:
@@ -261,4 +281,3 @@ class HTTPVoiceFallback:
             wf.setframerate(sample_rate)
             wf.writeframes(samples_i16.tobytes())
         return bio.getvalue()
-

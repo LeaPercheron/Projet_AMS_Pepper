@@ -57,3 +57,20 @@
 {"timestamp": "2026-02-16T09:36:53.702533", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
 {"timestamp": "2026-02-16T09:36:53.703541", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
 {"timestamp": "2026-02-16T15:43:44.231688", "level": "INFO", "event": "info", "data": {"message": "  Fallback vocal HTTP: actif (transcription=whisper-1)"}}
+{"timestamp": "2026-02-16T17:26:09.244351", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-02-16T17:26:09.244730", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-02-16T17:26:09.245004", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-02-16T17:26:09.452422", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-02-16T17:26:09.453099", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-02-16T17:26:09.463410", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-02-16T17:26:09.463857", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-02-16T17:26:09.467904", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-02-16T17:26:09.468277", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-02-16T17:26:09.468626", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-02-16T17:26:09.468961", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-02-16T17:26:09.482205", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-02-16T17:26:09.482745", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-02-16T17:26:09.484716", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-02-16T17:26:09.485754", "level": "INFO", "event": "info", "data": {"message": "  Tablette: handlers ask_question/start_visual_scan/start_barcode_scan/start_voice_question actifs"}}
+{"timestamp": "2026-02-16T17:26:09.485915", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-02-16T17:26:09.486309", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}

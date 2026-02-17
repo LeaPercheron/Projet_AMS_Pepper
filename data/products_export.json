@@ -1,10 +1,53 @@
 {
   "metadata": {
     "version": "2.0",
-    "total_products": 29,
-    "exported_at": "2026-01-22 20:06:39"
+    "total_products": 30,
+    "exported_at": "2026-02-17 18:27:59"
   },
   "products": [
+    {
+      "id": "AVENE-TOLERANCE-001",
+      "ean13": "3282770200249",
+      "name": "Tolérance Extrême Shampooing",
+      "brand": "Avène",
+      "category": "Shampooing",
+      "hair_type": [
+        "Cuir chevelu hypersensible",
+        "Cuir chevelu réactif"
+      ],
+      "price": 13.5,
+      "currency": "EUR",
+      "volume": "200ml",
+      "usage": "Shampooing ultra-apaisant pour cuir chevelu hypersensible.",
+      "instructions": "Appliquer sur cheveux mouillés, masser délicatement, rincer.",
+      "precautions": [
+        "Usage externe uniquement"
+      ],
+      "benefits": [
+        "Apaise immédiatement",
+        "Haute tolérance",
+        "Sans rinçage possible"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Eau Thermale Avène",
+          "benefit": "Apaisante et anti-irritante"
+        }
+      ],
+      "certifications": [
+        "Testé sous contrôle dermatologique",
+        "Stérile"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "avene",
+        "tolerance",
+        "sensible",
+        "apaisant"
+      ]
+    },
     {
       "id": "BIODERMA-NODEDS-001",
       "ean13": "3401572183283",
@@ -229,95 +272,6 @@
       ]
     },
     {
-      "id": "GARNIER-AVOCAT-001",
-      "ean13": "3600542154277",
-      "name": "Ultra Doux Avocat Karité Shampooing",
-      "brand": "Garnier",
-      "category": "Shampooing",
-      "hair_type": [
-        "Cheveux frisés",
-        "Cheveux crépus"
-      ],
-      "price": 4.5,
-      "currency": "EUR",
-      "volume": "300ml",
-      "usage": "Shampooing nourrissant pour cheveux frisés à crépus.",
-      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
-      "precautions": [
-        "Usage externe uniquement"
-      ],
-      "benefits": [
-        "Définit les boucles",
-        "Nourrit en profondeur",
-        "Anti-frisottis"
-      ],
-      "key_ingredients": [
-        {
-          "name": "Avocat",
-          "benefit": "Nutrition"
-        },
-        {
-          "name": "Karité",
-          "benefit": "Hydratation"
-        }
-      ],
-      "certifications": [
-        "Cruelty Free International"
-      ],
-      "photo_url": "",
-      "natural_origin_percentage": null,
-      "age_restriction": "",
-      "keywords": [
-        "garnier",
-        "ultra doux",
-        "avocat",
-        "karite",
-        "frises"
-      ]
-    },
-    {
-      "id": "GARNIER-ARGAN-001",
-      "ean13": "3600542154260",
-      "name": "Ultra Doux Huile d'Argan Shampooing",
-      "brand": "Garnier",
-      "category": "Shampooing",
-      "hair_type": [
-        "Cheveux secs",
-        "Cheveux très secs"
-      ],
-      "price": 4.5,
-      "currency": "EUR",
-      "volume": "300ml",
-      "usage": "Shampooing nourrissant pour cheveux secs à très secs.",
-      "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
-      "precautions": [
-        "Usage externe uniquement"
-      ],
-      "benefits": [
-        "Nutrition intense",
-        "Cheveux souples",
-        "Brillance"
-      ],
-      "key_ingredients": [
-        {
-          "name": "Huile d'Argan",
-          "benefit": "Nutrition profonde"
-        }
-      ],
-      "certifications": [
-        "Cruelty Free International"
-      ],
-      "photo_url": "",
-      "natural_origin_percentage": null,
-      "age_restriction": "",
-      "keywords": [
-        "garnier",
-        "ultra doux",
-        "argan",
-        "nourrissant"
-      ]
-    },
-    {
       "id": "GARNIER-MASQUE-MIEL-001",
       "ean13": "3600542154284",
       "name": "Ultra Doux Masque Réparateur Trésors de Miel",
@@ -413,6 +367,59 @@
         "ultra doux",
         "miel",
         "reparateur"
+      ]
+    },
+    {
+      "id": "HEADSHOULDERS-CLASSIC-001",
+      "ean13": "8700216156950",
+      "name": "Shampooing Antipelliculaire Classic",
+      "brand": "Head & Shoulders",
+      "category": "Shampooing",
+      "hair_type": [
+        "Tous types de cheveux",
+        "Pellicules"
+      ],
+      "price": 4.85,
+      "currency": "EUR",
+      "volume": "250ml",
+      "usage": "Shampooing antipelliculaire pour le lavage quotidien, aide à maintenir l'équilibre du cuir chevelu.",
+      "instructions": "Appliquer sur cheveux mouillés, masser le cuir chevelu puis rincer abondamment.",
+      "precautions": [
+        "Usage externe uniquement",
+        "Éviter le contact avec les yeux",
+        "Ne pas avaler"
+      ],
+      "benefits": [
+        "Aide à éliminer les pellicules visibles",
+        "Nettoie et rafraîchit le cuir chevelu",
+        "Convient à un usage fréquent"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Piroctone Olamine",
+          "benefit": "Actif antipelliculaire"
+        },
+        {
+          "name": "Niacinamide",
+          "benefit": "Soutient la barrière cutanée du cuir chevelu"
+        },
+        {
+          "name": "Panthenol",
+          "benefit": "Aide à maintenir la souplesse de la fibre capillaire"
+        }
+      ],
+      "certifications": [
+        "Testé dermatologiquement"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": null,
+      "age_restriction": "",
+      "keywords": [
+        "head and shoulders",
+        "classic",
+        "antipelliculaire",
+        "pellicules",
+        "usage quotidien"
       ]
     },
     {
@@ -584,6 +591,55 @@
         "ortie",
         "gras",
         "seboregulateur"
+      ]
+    },
+    {
+      "id": "KLORANE-EXTRADOUX-400-001",
+      "ean13": "3282770145373",
+      "name": "Shampooing à l'Avoine Extra-Doux",
+      "brand": "Klorane",
+      "category": "Shampooing",
+      "hair_type": [
+        "Tous types de cheveux",
+        "Cuir chevelu sensible"
+      ],
+      "price": 12.2,
+      "currency": "EUR",
+      "volume": "400ml",
+      "usage": "Shampooing extra-doux à usage fréquent pour toute la famille.",
+      "instructions": "Appliquer sur cheveux et cuir chevelu mouillés, faire mousser puis rincer.",
+      "precautions": [
+        "Usage externe uniquement",
+        "Éviter le contact avec les yeux"
+      ],
+      "benefits": [
+        "Nettoie en douceur",
+        "Adoucit et protège les cheveux",
+        "Haute tolérance pédiatrique dès 3 ans"
+      ],
+      "key_ingredients": [
+        {
+          "name": "Extrait d'Avoine BIO",
+          "benefit": "Apporte douceur et protection"
+        },
+        {
+          "name": "Glycérine végétale",
+          "benefit": "Contribue à l'hydratation des cheveux"
+        }
+      ],
+      "certifications": [
+        "Fabriqué en France"
+      ],
+      "photo_url": "",
+      "natural_origin_percentage": 87,
+      "age_restriction": "Dès 3 ans",
+      "keywords": [
+        "klorane",
+        "avoine",
+        "extra-doux",
+        "400ml",
+        "usage fréquent",
+        "famille"
       ]
     },
     {

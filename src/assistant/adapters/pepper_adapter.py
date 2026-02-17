@@ -33,6 +33,7 @@ class PepperAdapter(RobotAdapter):
         self._memory_service = None
         self._tablet_service = None
         self._motion_service = None
+        self._awareness_service = None
         self._audio_recorder_service = None
         self._file_manager_service = None
 
@@ -52,6 +53,8 @@ class PepperAdapter(RobotAdapter):
         self._audio_pull_mode = False
         self._audio_callback: Optional[Callable] = None
         self._video_callback: Optional[Callable] = None
+        self._head_frozen = False
+        self._awareness_was_enabled: Optional[bool] = None
 
     # CONNEXION
 
@@ -87,6 +90,11 @@ class PepperAdapter(RobotAdapter):
                 print("[Pepper] Service motion non disponible")
 
             try:
+                self._awareness_service = self._session.service("ALBasicAwareness")
+            except:
+                self._awareness_service = None
+
+            try:
                 self._audio_recorder_service = self._session.service("ALAudioRecorder")
             except:
                 print("[Pepper] Service audio recorder non disponible")
@@ -107,6 +115,7 @@ class PepperAdapter(RobotAdapter):
 
     def disconnect(self):
         # Ferme la connexion avec Pepper.
+        self.unfreeze_head()
         self.stop_audio_capture()
         self.stop_audio_playback()
         self.stop_video_stream()
@@ -523,12 +532,72 @@ class PepperAdapter(RobotAdapter):
         if not self._is_connected or not self._tablet_service:
             return False
 
-        try:
-            self._tablet_service.showWebview(url)
-            return True
-        except Exception as e:
-            print(f"[Pepper] Erreur tablette: {e}")
-            return False
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                # Après resetTablet, le service peut être présent mais pas prêt.
+                if attempt > 1 and self._session:
+                    try:
+                        self._tablet_service = self._session.service("ALTabletService")
+                    except Exception:
+                        pass
+                    time.sleep(1.0)
+
+                # Séquence robuste: réveil + Wi-Fi + nettoyage WebView.
+                try:
+                    if hasattr(self._tablet_service, "wakeUp"):
+                        self._tablet_service.wakeUp()
+                except Exception:
+                    pass
+
+                try:
+                    if hasattr(self._tablet_service, "setBrightness"):
+                        self._tablet_service.setBrightness(1.0)
+                except Exception:
+                    pass
+
+                try:
+                    if hasattr(self._tablet_service, "enableWifi"):
+                        self._tablet_service.enableWifi()
+                except Exception:
+                    pass
+
+                try:
+                    if hasattr(self._tablet_service, "hideWebview"):
+                        self._tablet_service.hideWebview()
+                except Exception:
+                    pass
+
+                try:
+                    if hasattr(self._tablet_service, "cleanWebview"):
+                        self._tablet_service.cleanWebview()
+                except Exception:
+                    pass
+
+                result = self._tablet_service.showWebview(url)
+                if result is False:
+                    last_error = "showWebview returned False"
+                    time.sleep(1.5)
+                    continue
+
+                try:
+                    if hasattr(self._tablet_service, "reloadPage"):
+                        # noCache=True si supporté, sinon appel simple.
+                        try:
+                            self._tablet_service.reloadPage(True)
+                        except Exception:
+                            self._tablet_service.reloadPage()
+                except Exception:
+                    pass
+
+                return True
+            except Exception as e:
+                last_error = e
+                time.sleep(1.5)
+
+        if last_error is not None:
+            print(f"[Pepper] Erreur tablette: {last_error}")
+        return False
 
     def hide_tablet(self):
         # Cache le contenu de la tablette.
@@ -578,6 +647,51 @@ class PepperAdapter(RobotAdapter):
                 )
             except:
                 pass
+
+    def freeze_head(self):
+        # Bloque la tete pour éviter les mouvements pendant un scan.
+        if self._head_frozen:
+            return
+
+        if self._awareness_service:
+            try:
+                enabled = self._awareness_service.isEnabled()
+                self._awareness_was_enabled = bool(enabled)
+            except Exception:
+                self._awareness_was_enabled = None
+            try:
+                self._awareness_service.setEnabled(False)
+            except Exception:
+                pass
+
+        if self._motion_service:
+            try:
+                self._motion_service.setStiffnesses("Head", 1.0)
+                self._motion_service.setAngles(["HeadYaw", "HeadPitch"], [0.0, -0.05], 0.15)
+            except Exception:
+                pass
+
+        self._head_frozen = True
+
+    def unfreeze_head(self):
+        # Restaure la tete après un scan.
+        if not self._head_frozen:
+            return
+
+        if self._awareness_service and self._awareness_was_enabled:
+            try:
+                self._awareness_service.setEnabled(True)
+            except Exception:
+                pass
+
+        if self._motion_service:
+            try:
+                self._motion_service.setStiffnesses("Head", 0.6)
+            except Exception:
+                pass
+
+        self._awareness_was_enabled = None
+        self._head_frozen = False
 
     # UTILITAIRES
 

@@ -21,10 +21,12 @@
 
                 <button class="home-btn home-btn-question" onclick="App.showScreen('advice')">
                     <span class="btn-icon"></span>
-                    <span class="btn-text">QUESTION GÉNÉRALE</span>
-                    <span class="btn-desc">Conseils capillaires</span>
+                    <span class="btn-text">QUESTION</span>
+                    <span class="btn-desc">Parler à Pepper</span>
                 </button>
             </div>
+
+            <p id="ws-status" class="ws-status">WebSocket: Connexion...</p>
 
             <div class="rgpd-notice">
                 <p>Aucune donnée personnelle n'est collectée ni stockée.<br>
@@ -44,7 +46,7 @@
                     <span class="btn-desc">Je le montre à la caméra</span>
                 </button>
 
-                <button class="scan-choice-btn" onclick="App.showScreen('barcode-scan')">
+                <button class="scan-choice-btn" onclick="App.startBarcodeScan()">
                     <span class="btn-icon"></span>
                     <span class="btn-text">Scanner le code-barres</span>
                     <span class="btn-desc">Je présente le code-barres</span>
@@ -94,7 +96,7 @@
             </div>
 
             <div class="top3-buttons">
-                <button class="secondary-btn" onclick="App.showScreen('barcode-scan')">
+                <button class="secondary-btn" onclick="App.startBarcodeScan()">
                     Aucun de ces produits → Scanner le code-barres
                 </button>
                 <button class="back-btn" onclick="App.showScreen('home')">
@@ -146,16 +148,11 @@
             <h2>Conseils capillaires</h2>
 
             <div class="detail-section">
-                <h3>Question à Pepper (mode secours)</h3>
-                <p>Si la voix temps réel est indisponible, tapez une question ici.</p>
-                <textarea
-                    id="fallback-question-input"
-                    rows="3"
-                    placeholder="Ex: Ce shampooing convient-il aux cheveux secs et colorés ?"
-                ></textarea>
+                <h3>Question vocale</h3>
+                <p>Appuyez puis parlez à voix haute.</p>
                 <div class="product-buttons">
-                    <button class="primary-btn" onclick="App.askFallbackQuestion()">
-                        Envoyer la question
+                    <button class="primary-btn" onclick="App.startVoiceQuestion()">
+                        🎤 Poser une question vocale
                     </button>
                 </div>
             </div>
@@ -213,6 +210,25 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        (function () {
+            var supportsModernJs = true;
+            try {
+                eval("const a = 1; let b = 2; (() => a + b)(); var t = `ok`; t;");
+            } catch (e) {
+                supportsModernJs = false;
+            }
+
+            if (!supportsModernJs) {
+                var compatScript = document.createElement("script");
+                compatScript.src = "app_legacy_ui.js";
+                document.body.appendChild(compatScript);
+            } else {
+                var script = document.createElement("script");
+                script.src = "app.js";
+                document.body.appendChild(script);
+            }
+        })();
+    </script>
 </body>
 </html>

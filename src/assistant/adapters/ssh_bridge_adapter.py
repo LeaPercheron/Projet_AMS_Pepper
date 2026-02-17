@@ -46,6 +46,7 @@ class SSHBridgeAdapter(RobotAdapter):
         self._audio_frames_sent = 0
         self._audio_frames_received = 0
         self._video_frames_sent = 0
+        self._head_frozen = False
 
     # CONNEXION
 
@@ -124,6 +125,7 @@ class SSHBridgeAdapter(RobotAdapter):
         return False
 
     def disconnect(self):
+        self.unfreeze_head()
         self.stop_audio_capture()
         self.stop_audio_playback()
         self.stop_video_stream()
@@ -450,6 +452,39 @@ class SSHBridgeAdapter(RobotAdapter):
             "print('OK')"
         )
         self._run_remote_python(self._build_qi_code(body), timeout=5.0)
+
+    def freeze_head(self):
+        if not self._is_connected or self._head_frozen:
+            return
+        body = (
+            "motion=s.service('ALMotion')\n"
+            "try:\n"
+            "    aware=s.service('ALBasicAwareness')\n"
+            "    aware.setEnabled(False)\n"
+            "except Exception:\n"
+            "    pass\n"
+            "motion.setStiffnesses('Head', 1.0)\n"
+            "motion.setAngles(['HeadYaw','HeadPitch'], [0.0,-0.05], 0.15)\n"
+            "print('OK')"
+        )
+        self._run_remote_python(self._build_qi_code(body), timeout=5.0)
+        self._head_frozen = True
+
+    def unfreeze_head(self):
+        if not self._is_connected or not self._head_frozen:
+            return
+        body = (
+            "motion=s.service('ALMotion')\n"
+            "try:\n"
+            "    aware=s.service('ALBasicAwareness')\n"
+            "    aware.setEnabled(True)\n"
+            "except Exception:\n"
+            "    pass\n"
+            "motion.setStiffnesses('Head', 0.6)\n"
+            "print('OK')"
+        )
+        self._run_remote_python(self._build_qi_code(body), timeout=5.0)
+        self._head_frozen = False
 
     # UTILITAIRES
 

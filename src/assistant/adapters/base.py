@@ -163,6 +163,14 @@ class RobotAdapter(ABC):
         # Pointe vers la tablette.
         pass
 
+    def freeze_head(self):
+        # Fige la tete (utile pendant un scan caméra).
+        pass
+
+    def unfreeze_head(self):
+        # Restaure le comportement normal de la tete.
+        pass
+
     # UTILITAIRES
 
     def register_callback(self, event: str, callback: Callable):
