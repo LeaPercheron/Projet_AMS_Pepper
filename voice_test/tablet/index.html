@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Test Pepper</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f0f4f9;
+      color: #1f2937;
+    }
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 22px;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      color: #1e3a8a;
+      font-size: 34px;
+    }
+    .status {
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: #374151;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #dbe5f1;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      background: #0f4c81;
+      color: #fff;
+      font-size: 24px;
+      padding: 16px 18px;
+      width: 100%;
+    }
+    .hint {
+      margin-top: 10px;
+      color: #4b5563;
+      font-size: 16px;
+    }
+    .msg {
+      font-size: 18px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .label {
+      font-size: 16px;
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+    #log {
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-size: 14px;
+      color: #334155;
+      background: #f8fafc;
+      border: 1px solid #dbe5f1;
+      border-radius: 8px;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Test vocal Pepper</h1>
+    <div class="status" id="status">WebSocket: Connexion...</div>
+
+    <div class="card">
+      <button onclick="startVoice()">Parler à Pepper</button>
+      <div class="hint">Appuyez, parlez clairement, Pepper répondra à l'oral.</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Dernier message</div>
+      <div class="msg" id="lastMessage">Aucun message</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Dernière question entendue</div>
+      <div class="msg" id="lastQuestion">Aucune question</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Dernière réponse Pepper</div>
+      <div class="msg" id="lastAnswer">Aucune réponse</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Logs</div>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var ws = null;
+
+      function wsUrl() {
+        var m = (window.location.search || "").match(/[?&]ws=([^&]+)/);
+        if (m && m[1]) {
+          try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+        }
+        var host = window.location.hostname || "localhost";
+        return "ws://" + host + ":8870";
+      }
+
+      function log(msg) {
+        var line = "[" + new Date().toLocaleTimeString() + "] " + msg;
+        var el = document.getElementById("log");
+        el.textContent = line + "\n" + el.textContent;
+      }
+
+      function setStatus(text) {
+        document.getElementById("status").textContent = "WebSocket: " + text;
+      }
+
+      function setMessage(text) {
+        document.getElementById("lastMessage").textContent = text || "";
+      }
+
+      function connect() {
+        try {
+          ws = new WebSocket(wsUrl());
+        } catch (e) {
+          setStatus("Erreur");
+          setTimeout(connect, 2000);
+          return;
+        }
+
+        ws.onopen = function () {
+          setStatus("Connecté");
+          log("WS connecté");
+        };
+        ws.onclose = function () {
+          setStatus("Déconnecté");
+          log("WS déconnecté, reconnexion...");
+          setTimeout(connect, 2000);
+        };
+        ws.onerror = function () {
+          setStatus("Erreur");
+        };
+        ws.onmessage = function (ev) {
+          try {
+            var msg = JSON.parse(ev.data);
+            log("RX " + msg.type);
+
+            if (msg.type === "status") {
+              setStatus(msg.status || "connecté");
+              return;
+            }
+            if (msg.type === "security_alert") {
+              setMessage((msg.title || "Info") + " - " + (msg.message || ""));
+              return;
+            }
+            if (msg.type === "qa_answer") {
+              document.getElementById("lastQuestion").textContent = msg.question || "";
+              document.getElementById("lastAnswer").textContent = msg.answer || "";
+              setMessage("Réponse Pepper reçue");
+              return;
+            }
+            if (msg.type === "error") {
+              setMessage("Erreur: " + (msg.message || ""));
+            }
+          } catch (e) {
+            log("Message invalide");
+          }
+        };
+      }
+
+      window.startVoice = function () {
+        if (!ws || ws.readyState !== 1) {
+          setMessage("WebSocket non connecté");
+          return;
+        }
+        var payload = {
+          type: "command",
+          command: "start_voice_question",
+          data: { duration_s: 9 },
+          timestamp: Date.now()
+        };
+        ws.send(JSON.stringify(payload));
+        setMessage("Parlez maintenant...");
+      };
+
+      connect();
+    })();
+  </script>
+</body>
+</html>

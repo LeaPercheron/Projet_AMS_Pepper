@@ -2,7 +2,10 @@
   "metadata": {
     "version": "2.0",
     "total_products": 30,
-    "exported_at": "2026-02-17 18:27:59"
+    "exported_at": "2026-02-17 18:27:59",
+    "images_synced_at": "2026-02-23 12:21:47",
+    "images_downloaded": 0,
+    "images_placeholders": 30
   },
   "products": [
     {
@@ -38,7 +41,7 @@
         "Testé sous contrôle dermatologique",
         "Stérile"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770200249.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -82,7 +85,7 @@
         }
       ],
       "certifications": [],
-      "photo_url": "",
+      "photo_url": "product_images/3401572183283.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -125,7 +128,7 @@
         "Sans sulfates",
         "Sans silicone"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3401572183276.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -167,7 +170,7 @@
       "certifications": [
         "Sans sulfates"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282779328258.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -215,7 +218,7 @@
         "Sans silicone",
         "Biodégradable"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282779328241.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -261,7 +264,7 @@
         }
       ],
       "certifications": [],
-      "photo_url": "",
+      "photo_url": "product_images/3282779328265.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -307,7 +310,7 @@
       "certifications": [
         "Cruelty Free"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3600542154284.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -359,7 +362,7 @@
         "Cruelty Free International",
         "Flacon 100% recyclé"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3600542154253.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -411,7 +414,7 @@
       "certifications": [
         "Testé dermatologiquement"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/8700216156950.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -453,7 +456,7 @@
       "certifications": [
         "Vegan"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770149302.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -496,7 +499,7 @@
         "Vegan",
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770149296.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -540,7 +543,7 @@
         "Vegan",
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770149272.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -583,7 +586,7 @@
         "Vegan",
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770149289.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -630,7 +633,7 @@
       "certifications": [
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770145373.png",
       "natural_origin_percentage": 87,
       "age_restriction": "Dès 3 ans",
       "keywords": [
@@ -674,7 +677,7 @@
       "certifications": [
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3600524029548.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -716,7 +719,7 @@
       "certifications": [
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3600524029555.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -755,7 +758,7 @@
         }
       ],
       "certifications": [],
-      "photo_url": "",
+      "photo_url": "product_images/3600524029562.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -800,7 +803,7 @@
         "Fabriqué en France",
         "Flacon 100% recyclé"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3600524029531.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -844,7 +847,7 @@
         "Sans silicone",
         "Sans parabène"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3337872414602.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -884,7 +887,7 @@
         }
       ],
       "certifications": [],
-      "photo_url": "",
+      "photo_url": "product_images/3337872414619.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -927,7 +930,7 @@
         "Testé pédiatres",
         "Hypoallergénique"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3504105029791.png",
       "natural_origin_percentage": null,
       "age_restriction": "Dès la naissance",
       "keywords": [
@@ -966,7 +969,7 @@
         }
       ],
       "certifications": [],
-      "photo_url": "",
+      "photo_url": "product_images/3264680009761.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1007,7 +1010,7 @@
       "certifications": [
         "Vegan"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3338221000101.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1049,7 +1052,7 @@
       "certifications": [
         "Vegan"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3338221000118.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1092,7 +1095,7 @@
       "certifications": [
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770152654.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1131,7 +1134,7 @@
         }
       ],
       "certifications": [],
-      "photo_url": "",
+      "photo_url": "product_images/3282770152678.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1173,7 +1176,7 @@
       "certifications": [
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770152661.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1222,7 +1225,7 @@
         "Sans sulfates",
         "Fabriqué en France"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3282770152647.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1265,7 +1268,7 @@
       "certifications": [
         "Testé sous contrôle dermatologique"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3337871330194.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [
@@ -1306,7 +1309,7 @@
       "certifications": [
         "Testé sous contrôle dermatologique"
       ],
-      "photo_url": "",
+      "photo_url": "product_images/3337871330187.png",
       "natural_origin_percentage": null,
       "age_restriction": "",
       "keywords": [

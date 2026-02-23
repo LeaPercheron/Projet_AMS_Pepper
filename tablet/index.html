@@ -28,10 +28,6 @@
 
             <p id="ws-status" class="ws-status">WebSocket: Connexion...</p>
 
-            <div class="rgpd-notice">
-                <p>Aucune donnée personnelle n'est collectée ni stockée.<br>
-                Les échanges vocaux sont traités en temps réel et ne sont pas enregistrés.</p>
-            </div>
         </div>
     </div>
 
@@ -154,6 +150,9 @@
                     <button class="primary-btn" onclick="App.startVoiceQuestion()">
                         🎤 Poser une question vocale
                     </button>
+                    <button id="text-question-btn" class="secondary-btn" style="display:none;" onclick="App.askTextQuestion()">
+                        ⌨️ Question écrite (secours)
+                    </button>
                 </div>
             </div>
 
@@ -172,11 +171,20 @@
                     <button class="filter-btn" data-filter="normaux" onclick="App.filterProducts('normaux')">
                         Cheveux normaux
                     </button>
-                    <button class="filter-btn" data-filter="colores" onclick="App.filterProducts('colorés')">
+                    <button class="filter-btn" data-filter="colores" onclick="App.filterProducts('colores')">
                         Cheveux colorés
                     </button>
                     <button class="filter-btn" data-filter="pellicules" onclick="App.filterProducts('pellicules')">
                         Anti-pelliculaire
+                    </button>
+                    <button class="filter-btn" data-filter="sensibles" onclick="App.filterProducts('sensibles')">
+                        Cuir chevelu sensible
+                    </button>
+                    <button class="filter-btn" data-filter="abimes" onclick="App.filterProducts('abimes')">
+                        Cheveux abîmés/chute
+                    </button>
+                    <button class="filter-btn" data-filter="autres" onclick="App.filterProducts('autres')">
+                        Autres besoins
                     </button>
                 </div>
             </div>
@@ -213,6 +221,13 @@
     <script>
         (function () {
             var supportsModernJs = true;
+            var cacheKey = String(Date.now());
+            try {
+                var cb = new URLSearchParams(window.location.search).get("cb");
+                if (cb) {
+                    cacheKey = cb;
+                }
+            } catch (e) {}
             try {
                 eval("const a = 1; let b = 2; (() => a + b)(); var t = `ok`; t;");
             } catch (e) {
@@ -221,11 +236,11 @@
 
             if (!supportsModernJs) {
                 var compatScript = document.createElement("script");
-                compatScript.src = "app_legacy_ui.js";
+                compatScript.src = "app_legacy_ui.js?v=" + encodeURIComponent(cacheKey);
                 document.body.appendChild(compatScript);
             } else {
                 var script = document.createElement("script");
-                script.src = "app.js";
+                script.src = "app.js?v=" + encodeURIComponent(cacheKey);
                 document.body.appendChild(script);
             }
         })();

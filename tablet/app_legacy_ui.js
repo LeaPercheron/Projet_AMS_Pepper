@@ -27,7 +27,12 @@
             var host = window.location.hostname || "localhost";
             return "ws://" + host + ":8765";
         })(),
+        textQuestionEnabled: (function () {
+            var search = window.location.search || "";
+            return /(?:[?&])textq=1(?:&|$)/.test(search);
+        })(),
         scanTimeout: 30000,
+        placeholderImage: "placeholder.png",
         debug: true
     };
 
@@ -48,8 +53,17 @@
         init: function () {
             this.loadDemoProducts();
             this.connectWebSocket();
+            this.configureTextQuestionButton();
             this.showScreen("home");
             this.log("UI compat initialisée");
+        },
+
+        configureTextQuestionButton: function () {
+            var btn = byId("text-question-btn");
+            if (!btn) {
+                return;
+            }
+            btn.style.display = CONFIG.textQuestionEnabled ? "" : "none";
         },
 
         log: function () {
@@ -84,7 +98,76 @@
                 if (screenId === "barcode-scan") {
                     this.updateBarcodeStatus("waiting", "En attente du code-barres...");
                 }
+                if (screenId === "advice") {
+                    this.requestProducts();
+                }
             }
+        },
+
+        normalizeText: function (value) {
+            return String(value || "")
+                .toLowerCase()
+                .replace(/[àáâãäå]/g, "a")
+                .replace(/[èéêë]/g, "e")
+                .replace(/[ìíîï]/g, "i")
+                .replace(/[òóôõö]/g, "o")
+                .replace(/[ùúûü]/g, "u")
+                .replace(/[ç]/g, "c")
+                .replace(/[ñ]/g, "n");
+        },
+
+        toAbsoluteUrl: function (value) {
+            var text = String(value || "").trim();
+            if (!text) {
+                return "";
+            }
+            if (/^(https?:|wss?:|data:|blob:|file:|\/)/i.test(text)) {
+                return text;
+            }
+            try {
+                return new URL(text, window.location.href).toString();
+            } catch (e) {
+                return text;
+            }
+        },
+
+        createProductPlaceholder: function () {
+            return this.toAbsoluteUrl(CONFIG.placeholderImage);
+        },
+
+        resolveImageUrl: function (imageUrl, product) {
+            var value = String(imageUrl || "").trim();
+            var isGenericPlaceholder = (
+                !value
+                || value === CONFIG.placeholderImage
+                || /\/placeholder\.svg$/.test(value)
+                || /\/placeholder\.png$/.test(value)
+            );
+            if (isGenericPlaceholder) {
+                return this.createProductPlaceholder(product || {});
+            }
+            return this.toAbsoluteUrl(value);
+        },
+
+        inferProductCategories: function (product) {
+            product = product || {};
+            var haystack = this.normalizeText(
+                (product.hair_type || "")
+                + " " + (product.usage || "")
+                + " " + (product.name || "")
+                + " " + (product.brand || "")
+            );
+
+            var categories = [];
+            if (/(sec|deshydrat|hydrat|nourri|nutrition)/.test(haystack)) categories.push("secs");
+            if (/(gras|sebo|seborr)/.test(haystack)) categories.push("gras");
+            if (/(tous types|tout type|normal|usage quotidien|frequent|doux)/.test(haystack)) categories.push("normaux");
+            if (/(color|mech)/.test(haystack)) categories.push("colores");
+            if (/(pellic|anti[ -]?pellic|dermite|ds\+?)/.test(haystack)) categories.push("pellicules");
+            if (/(sensible|reactif|hypersens|irrit|delicat)/.test(haystack)) categories.push("sensibles");
+            if (/(abime|fragil|repar|casse|chute|fortifi)/.test(haystack)) categories.push("abimes");
+            if (categories.length === 0) categories.push("autres");
+            return categories;
         },
 
         showLoading: function (message) {
@@ -174,11 +257,31 @@
             this.showLoading("Parlez, Pepper vous écoute...");
         },
 
+        askTextQuestion: function () {
+            if (!CONFIG.textQuestionEnabled) {
+                return;
+            }
+            var question = window.prompt("Entrez votre question sur le shampooing :");
+            var text = String(question || "").trim();
+            if (!text) {
+                return;
+            }
+            if (!this.sendCommand("ask_question", { question: text })) {
+                this.showError("Connexion tablette indisponible.");
+                return;
+            }
+            this.showLoading("Question envoyée à Pepper...");
+        },
+
         showProduct: function (product) {
             product = product || {};
             var img = byId("product-image");
             if (img) {
-                img.src = product.image || "placeholder.png";
+                img.src = this.resolveImageUrl(product.image, product);
+                img.onerror = function () {
+                    img.onerror = null;
+                    img.src = App.resolveImageUrl("", product);
+                };
             }
             byId("product-name").textContent = product.name || "Produit inconnu";
             byId("product-brand").textContent = product.brand || "";
@@ -212,8 +315,12 @@
 
                     var image = document.createElement("img");
                     image.className = "top3-card-image";
-                    image.src = result.image || "placeholder.png";
+                    image.src = self.resolveImageUrl(result.image, result);
                     image.alt = result.name || "Produit";
+                    image.onerror = function () {
+                        image.onerror = null;
+                        image.src = self.resolveImageUrl("", result);
+                    };
 
                     var name = document.createElement("p");
                     name.className = "top3-card-name";
@@ -262,8 +369,9 @@
                 AppState.filteredProducts = [];
                 for (i = 0; i < AppState.products.length; i += 1) {
                     var p = AppState.products[i];
-                    var hairType = (p.hair_type || "").toLowerCase();
-                    if (hairType.indexOf(String(filter).toLowerCase()) >= 0) {
+                    var categories = p._categories || this.inferProductCategories(p);
+                    p._categories = categories;
+                    if (categories.indexOf(String(filter)) >= 0) {
                         AppState.filteredProducts.push(p);
                     }
                 }
@@ -286,12 +394,20 @@
                     };
 
                     var img = document.createElement("img");
-                    img.src = product.image || "placeholder.png";
+                    img.src = self.resolveImageUrl(product.image, product);
                     img.alt = product.name || "Produit";
+                    img.onerror = function () {
+                        img.onerror = null;
+                        img.src = self.resolveImageUrl("", product);
+                    };
 
                     var name = document.createElement("p");
                     name.className = "name";
                     name.textContent = product.name || "Produit";
+
+                    var brand = document.createElement("p");
+                    brand.className = "brand";
+                    brand.textContent = product.brand || "";
 
                     var price = document.createElement("p");
                     price.className = "price";
@@ -301,6 +417,7 @@
 
                     item.appendChild(img);
                     item.appendChild(name);
+                    item.appendChild(brand);
                     item.appendChild(price);
                     container.appendChild(item);
                 })(i);
@@ -334,7 +451,15 @@
             } else if (message.type === "show_screen") {
                 this.showScreen(message.screen || "home");
             } else if (message.type === "products_list") {
-                AppState.products = message.products || [];
+                AppState.products = (message.products || []).map(function (p) {
+                    var product = p || {};
+                    if (Object.prototype.toString.call(product.hair_type) === "[object Array]") {
+                        product.hair_type = product.hair_type.join(", ");
+                    }
+                    product._categories = this.inferProductCategories(product);
+                    product.image = this.resolveImageUrl(product.image, product);
+                    return product;
+                }, this);
                 this.filterProducts("all");
             } else if (message.type === "status") {
                 this.updateConnectionStatus(message.status || "connecté");
@@ -356,6 +481,7 @@
             AppState.ws.onopen = function () {
                 AppState.connected = true;
                 self.updateConnectionStatus("Connecté");
+                self.requestProducts();
             };
 
             AppState.ws.onclose = function () {
@@ -373,6 +499,13 @@
             };
         },
 
+        requestProducts: function () {
+            var sent = this.sendCommand("get_products", { shampoo_only: true, limit: 200 });
+            if (!sent) {
+                this.log("Demande produits ignorée: WS non connectée");
+            }
+        },
+
         loadDemoProducts: function () {
             AppState.products = [
                 {
@@ -382,7 +515,7 @@
                     price: 9.5,
                     usage: "Shampooing doux pour usage fréquent.",
                     hair_type: "Tous types",
-                    image: "https://via.placeholder.com/200x200?text=Klorane"
+                    image: CONFIG.placeholderImage
                 },
                 {
                     ean: "3600523735501",
@@ -391,7 +524,7 @@
                     price: 4.9,
                     usage: "Protection couleur pour cheveux colorés.",
                     hair_type: "Cheveux colorés",
-                    image: "https://via.placeholder.com/200x200?text=Elseve"
+                    image: CONFIG.placeholderImage
                 },
                 {
                     ean: "3337871324568",
@@ -400,7 +533,7 @@
                     price: 12.9,
                     usage: "Élimine les pellicules.",
                     hair_type: "Pellicules",
-                    image: "https://via.placeholder.com/200x200?text=Vichy"
+                    image: CONFIG.placeholderImage
                 }
             ];
             AppState.filteredProducts = AppState.products.slice(0);

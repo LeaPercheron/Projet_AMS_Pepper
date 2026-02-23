@@ -28,6 +28,30 @@ if load_dotenv is not None:
     load_dotenv(project_root / ".env")
     load_dotenv()
 
+
+def _configure_tls_ca_bundle() -> None:
+    # Force un bundle CA cohérent (certifi) pour OpenAI/HuggingFace/requests.
+    force = os.getenv("PEPPER_FORCE_CERTIFI_CA", "1").strip().lower() in {"1", "true", "yes", "on"}
+    if not force:
+        return
+    try:
+        import certifi
+    except Exception:
+        return
+    try:
+        ca_path = certifi.where()
+    except Exception:
+        return
+    if not ca_path or not Path(ca_path).exists():
+        return
+
+    os.environ.setdefault("SSL_CERT_FILE", ca_path)
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", ca_path)
+    os.environ.setdefault("CURL_CA_BUNDLE", ca_path)
+
+
+_configure_tls_ca_bundle()
+
 from assistant.config import (
     Config, RunMode, get_config, reset_config,
     get_development_config, get_production_config, get_simulation_config
@@ -68,6 +92,13 @@ class PepperAssistant:
         self._main_loop = None
         self._tablet_url_override = (tablet_url_override or "").strip()
         self._scan_lock = asyncio.Lock()
+        disable_vlm_env = os.getenv("PEPPER_VLM_DISABLED", "").strip().lower()
+        self._vlm_disabled = disable_vlm_env in {"1", "true", "yes", "on"}
+        text_q_env = os.getenv("TABLET_TEXT_QUESTION_ENABLED", "0").strip().lower()
+        self._tablet_text_question_enabled = text_q_env in {"1", "true", "yes", "on"}
+        self._voice_request_seq = 0
+        self._voice_transcript_seq = 0
+        self._scan_dump_logged = False
 
     async def setup(self):
         # Initialise tous les modules.
@@ -189,6 +220,10 @@ class PepperAssistant:
                 database_path=self.config.database.db_path
             )
             self.logger.log_info(f"  Vision: {self.config.vision.vlm_model}")
+            if self._vlm_disabled:
+                self.logger.log_warning(
+                    "  Vision: VLM désactivé via PEPPER_VLM_DISABLED, mode scan code-barres prioritaire"
+                )
 
         except ImportError as e:
             self.logger.log_warning(f"Module vision non disponible: {e}")
@@ -343,12 +378,28 @@ class PepperAssistant:
             if not input_ch:
                 input_ch = self.config.audio.input_channels
 
+            mono_channel_index = int(os.getenv("OPENAI_HTTP_MONO_CHANNEL_INDEX", "2") or "2")
+            front_only = os.getenv("PEPPER_AUDIO_RECORDER_FRONT_ONLY", "1").strip().lower() in {"1", "true", "yes", "on"}
+            if self.adapter.__class__.__name__ == "PepperAdapter" and front_only:
+                input_sr = 16000
+                input_ch = 1
+                mono_channel_index = 0
+
             vf_config = VoiceFallbackConfig(
                 input_sample_rate=int(input_sr),
                 input_channels=int(input_ch),
+                speech_threshold=float(os.getenv("OPENAI_HTTP_SPEECH_THRESHOLD", "0.010") or "0.010"),
+                min_utterance_s=float(os.getenv("OPENAI_HTTP_MIN_UTTERANCE_S", "0.35") or "0.35"),
+                end_silence_s=float(os.getenv("OPENAI_HTTP_END_SILENCE_S", "0.90") or "0.90"),
+                mono_channel_index=mono_channel_index,
+                input_gain=float(os.getenv("OPENAI_HTTP_INPUT_GAIN", "1.0") or "1.0"),
                 transcription_model=transcription_model,
                 manual_trigger=True,
-                listen_window_s=9.0
+                listen_window_s=9.0,
+                local_stt_enabled=os.getenv("OPENAI_HTTP_LOCAL_STT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"},
+                local_stt_model=(os.getenv("OPENAI_HTTP_LOCAL_STT_MODEL", "") or "mlx-community/distil-whisper-large-v3").strip(),
+                local_stt_path=os.getenv("OPENAI_HTTP_LOCAL_STT_PATH", "").strip(),
+                offline_answer_on_error=os.getenv("OPENAI_HTTP_OFFLINE_ANSWER_ON_ERROR", "0").strip().lower() in {"1", "true", "yes", "on"}
             )
 
             def _speak_blocking(answer_text: str):
@@ -377,6 +428,7 @@ class PepperAssistant:
         # Callback thread-safe: transcription utilisateur via fallback vocal.
         if not transcript:
             return
+        self._voice_transcript_seq += 1
         if self.orchestrator:
             try:
                 from assistant.orchestrator import Event
@@ -407,13 +459,19 @@ class PepperAssistant:
             return
         try:
             self.tablet_server.register_handler("ask_question", self._handle_tablet_ask_question)
+            self.tablet_server.register_handler("get_products", self._handle_tablet_get_products)
             self.tablet_server.register_handler("start_visual_scan", self._handle_tablet_start_visual_scan)
             self.tablet_server.register_handler("start_barcode_scan", self._handle_tablet_start_barcode_scan)
             self.tablet_server.register_handler("confirm_product", self._handle_tablet_confirm_product)
             self.tablet_server.register_handler("start_voice_question", self._handle_tablet_start_voice_question)
-            self.logger.log_info(
-                "  Tablette: handlers start_visual_scan/start_barcode_scan/start_voice_question actifs (ask_question désactivé)"
-            )
+            if self._tablet_text_question_enabled:
+                self.logger.log_info(
+                    "  Tablette: handlers get_products/ask_question/start_visual_scan/start_barcode_scan/start_voice_question actifs"
+                )
+            else:
+                self.logger.log_info(
+                    "  Tablette: handlers get_products/start_visual_scan/start_barcode_scan/start_voice_question actifs (ask_question désactivé)"
+                )
         except Exception as e:
             self.logger.log_warning(f"  Tablette: handlers indisponibles ({e})")
 
@@ -527,22 +585,124 @@ class PepperAssistant:
             image=payload.get("image", ""),
         )
 
-    async def _capture_scan_images(self, num_frames: int, interval_s: float = 0.18) -> List[Any]:
+    async def _capture_scan_images(
+        self,
+        num_frames: int,
+        interval_s: float = 0.18,
+        scan_label: str = "scan",
+        log_frames: bool = False,
+    ) -> List[Any]:
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             return []
 
         captured: List[Any] = []
         frames = max(1, int(num_frames))
+        scan_started_at = time.time()
+        dump_dir = os.getenv("PEPPER_BARCODE_DUMP_DIR", "").strip()
+        resolution_override_raw = os.getenv("PEPPER_BARCODE_CAMERA_RESOLUTION", "").strip()
+        resolution_override = None
+        if resolution_override_raw:
+            try:
+                resolution_override = int(resolution_override_raw)
+            except Exception:
+                resolution_override = None
+        if not dump_dir:
+            keep_scans = os.getenv("PEPPER_SCAN_KEEP_IMAGES", "1").strip().lower() in {"1", "true", "yes", "on"}
+            if keep_scans:
+                dump_dir = "logs/pepper_diagnostics/barcode_dump"
+        if dump_dir and not self._scan_dump_logged:
+            self.logger.log_info(f"  Scan: sauvegarde images activée dans {dump_dir}")
+            self._scan_dump_logged = True
+
+        # Chemin optimisé: si l'adaptateur expose une capture burst, on l'utilise.
+        if hasattr(self.adapter, "capture_images"):
+            try:
+                def _capture_burst():
+                    if resolution_override is not None:
+                        try:
+                            return self.adapter.capture_images(
+                                frames,
+                                max(0.05, float(interval_s)),
+                                resolution=resolution_override,
+                            )
+                        except TypeError:
+                            pass
+                    return self.adapter.capture_images(
+                        frames,
+                        max(0.05, float(interval_s)),
+                    )
+                raw_frames = await asyncio.to_thread(_capture_burst)
+            except Exception:
+                raw_frames = []
+
+            for idx, raw in enumerate(raw_frames or []):
+                image = self._extract_image_from_frame(raw)
+                if image is not None:
+                    captured.append(image)
+                    if log_frames:
+                        self.logger.log_info(
+                            f"  {scan_label}: photo {idx + 1}/{frames} capturée ({image.width}x{image.height})"
+                        )
+                    self._dump_scan_image_if_enabled(image, dump_dir, scan_label, idx + 1)
+                elif log_frames:
+                    raw_size = len(raw) if isinstance(raw, (bytes, bytearray)) else 0
+                    self.logger.log_warning(
+                        f"  {scan_label}: frame {idx + 1}/{frames} invalide ({raw_size} octets)"
+                    )
+
+            if log_frames:
+                elapsed = time.time() - scan_started_at
+                self.logger.log_info(
+                    f"  {scan_label}: burst terminé en {elapsed:.2f}s ({len(captured)}/{frames} images valides)"
+                )
+                if resolution_override is not None:
+                    self.logger.log_info(
+                        f"  {scan_label}: résolution caméra forcée={resolution_override}"
+                    )
+            return captured
 
         for idx in range(frames):
             raw = await asyncio.to_thread(self.adapter.capture_image)
             image = self._extract_image_from_frame(raw)
             if image is not None:
                 captured.append(image)
+                if log_frames:
+                    self.logger.log_info(
+                        f"  {scan_label}: photo {idx + 1}/{frames} capturée ({image.width}x{image.height})"
+                    )
+                self._dump_scan_image_if_enabled(image, dump_dir, scan_label, idx + 1)
+            elif log_frames:
+                raw_size = len(raw) if isinstance(raw, (bytes, bytearray)) else 0
+                if raw_size:
+                    self.logger.log_warning(
+                        f"  {scan_label}: frame {idx + 1}/{frames} reçue ({raw_size} octets) "
+                        "mais format image non reconnu"
+                    )
+                else:
+                    self.logger.log_warning(f"  {scan_label}: échec capture photo {idx + 1}/{frames}")
             if idx < frames - 1:
                 await asyncio.sleep(max(0.05, float(interval_s)))
 
+        if log_frames:
+            elapsed = time.time() - scan_started_at
+            self.logger.log_info(
+                f"  {scan_label}: capture terminée en {elapsed:.2f}s ({len(captured)}/{frames} images valides)"
+            )
         return captured
+
+    def _dump_scan_image_if_enabled(self, image: Any, dump_dir: str, scan_label: str, idx: int):
+        # Sauvegarde optionnelle des images de scan pour debug terrain.
+        if not dump_dir:
+            return
+        try:
+            target_dir = Path(dump_dir)
+            target_dir.mkdir(parents=True, exist_ok=True)
+            safe_label = "".join(ch if ch.isalnum() else "_" for ch in scan_label).strip("_") or "scan"
+            ts_ms = int(time.time() * 1000)
+            out_path = target_dir / f"{safe_label}_{idx:02d}_{ts_ms}.jpg"
+            image.save(out_path, format="JPEG", quality=95)
+        except Exception:
+            pass
 
     def _find_product_by_ean(self, ean: str):
         if not self.database or not hasattr(self.database, "get_by_ean"):
@@ -595,19 +755,24 @@ class PepperAssistant:
         # Détection code-barres directe (sans dépendre du VLM).
         detector = getattr(getattr(self.vision_pipeline, "pipeline", None), "barcode_detector", None)
         if not detector or not hasattr(detector, "detect_in_images"):
+            self.logger.log_warning("  Scan code-barres: détecteur indisponible (pyzbar/libzbar non chargé)")
             return False, "", None
 
         try:
             barcode = await asyncio.to_thread(detector.detect_in_images, images)
-        except Exception:
+        except Exception as e:
+            self.logger.log_warning(f"  Scan code-barres: erreur détecteur ({e})")
             barcode = None
 
         if not barcode or not getattr(barcode, "ean13", None):
             return False, "", None
 
         ean = str(barcode.ean13 or "").strip()
+        confidence = float(getattr(barcode, "confidence", 0.0) or 0.0)
         product = self._find_product_by_ean(ean)
         payload = self._build_tablet_product_payload(product, fallback={"ean": ean})
+        payload["scan_confidence"] = confidence
+        payload["scan_source"] = "barcode"
         return True, ean, payload
 
     @staticmethod
@@ -632,6 +797,15 @@ class PepperAssistant:
         if not images:
             return "error", "Aucune image capturée. Vérifiez la caméra Pepper."
 
+        if self._vlm_disabled:
+            ok, _, payload = await self._detect_barcode_from_images(images)
+            if ok and payload:
+                return "product", payload
+            return "barcode", (
+                "Le scan visuel est indisponible pour le moment. "
+                "Passez en scan code-barres."
+            )
+
         try:
             result = await asyncio.to_thread(self.vision_pipeline.identify_product, images)
         except Exception as e:
@@ -641,6 +815,12 @@ class PepperAssistant:
         if not result or not getattr(result, "success", False):
             message = getattr(result, "message", "") or "Le produit n'a pas pu être identifié."
             if self._is_vlm_unavailable_message(message):
+                if not self._vlm_disabled:
+                    self._vlm_disabled = True
+                    self.logger.log_warning(
+                        "  Vision: VLM indisponible (SSL/HuggingFace). "
+                        "Bascule automatique en mode code-barres."
+                    )
                 ok, _, payload = await self._detect_barcode_from_images(images)
                 if ok and payload:
                     return "product", payload
@@ -708,20 +888,46 @@ class PepperAssistant:
         if not self.vision_pipeline:
             return False, "", None
 
-        attempts = 6
+        attempts = max(1, int(os.getenv("PEPPER_BARCODE_ATTEMPTS", "8") or 8))
+        frames_per_attempt = max(1, int(os.getenv("PEPPER_BARCODE_FRAMES", "4") or 4))
+        frame_interval_s = max(0.05, float(os.getenv("PEPPER_BARCODE_FRAME_INTERVAL", "0.14") or 0.14))
+        between_attempt_s = max(0.05, float(os.getenv("PEPPER_BARCODE_ATTEMPT_COOLDOWN", "0.2") or 0.2))
 
-        for _ in range(attempts):
-            images = await self._capture_scan_images(num_frames=2, interval_s=0.12)
+        self.logger.log_info(
+            "  Scan code-barres: démarrage "
+            f"({attempts} tentatives, {frames_per_attempt} photos/tentative)"
+        )
+
+        for attempt in range(1, attempts + 1):
+            scan_label = f"Scan code-barres tentative {attempt}/{attempts}"
+            self.logger.log_info(f"  {scan_label}: capture en cours")
+            images = await self._capture_scan_images(
+                num_frames=frames_per_attempt,
+                interval_s=frame_interval_s,
+                scan_label=scan_label,
+                log_frames=True,
+            )
             if not images:
-                await asyncio.sleep(0.2)
+                self.logger.log_warning(f"  {scan_label}: aucune image exploitable")
+                await asyncio.sleep(between_attempt_s)
                 continue
 
+            self.logger.log_info(f"  {scan_label}: {len(images)} image(s) analysée(s)")
             ok, ean, payload = await self._detect_barcode_from_images(images)
             if ok:
+                confidence = ""
+                if isinstance(payload, dict) and "scan_confidence" in payload:
+                    try:
+                        confidence = f", confiance {float(payload['scan_confidence']):.2f}"
+                    except Exception:
+                        confidence = ""
+                self.logger.log_info(f"  {scan_label}: succès, EAN détecté {ean}{confidence}")
                 return True, ean, payload
 
-            await asyncio.sleep(0.2)
+            self.logger.log_info(f"  {scan_label}: aucun code détecté")
+            await asyncio.sleep(between_attempt_s)
 
+        self.logger.log_warning("  Scan code-barres: échec, aucun EAN détecté après toutes les tentatives")
         return False, "", None
 
     async def _handle_tablet_start_visual_scan(self, websocket, data):
@@ -792,6 +998,7 @@ class PepperAssistant:
 
         async with self._scan_lock:
             try:
+                self.logger.log_info("  Tablette: start_barcode_scan reçu")
                 if self.adapter and hasattr(self.adapter, "freeze_head"):
                     await asyncio.to_thread(self.adapter.freeze_head)
                 await self._set_scan_led((255, 140, 0))
@@ -805,11 +1012,13 @@ class PepperAssistant:
                     await self.tablet_server.send_barcode_detected(websocket, ean, product_msg)
                     if payload and payload.get("name"):
                         await self.tablet_server.send_product_identified(websocket, product_msg)
+                    self.logger.log_info(f"  Tablette: code-barres détecté ({ean})")
                     return
 
                 await self._set_scan_led((220, 30, 30))
                 await self._say_scan_status("Je n'ai pas détecté le code barres.")
                 await self.tablet_server.send_barcode_failed(websocket)
+                self.logger.log_warning("  Tablette: scan code-barres terminé sans résultat")
             finally:
                 if self.adapter and hasattr(self.adapter, "unfreeze_head"):
                     await asyncio.to_thread(self.adapter.unfreeze_head)
@@ -832,6 +1041,41 @@ class PepperAssistant:
             websocket,
             self._to_tablet_product(payload)
         )
+
+    async def _handle_tablet_get_products(self, websocket, data):
+        # Retourne la liste produits pour l'écran conseil.
+        if not self.database or not hasattr(self.database, "get_all_products"):
+            await self.tablet_server._send_error(websocket, "Base produits indisponible.")
+            return
+
+        payload_data = data or {}
+        shampoo_only = bool(payload_data.get("shampoo_only", True))
+        try:
+            limit = int(payload_data.get("limit", 120))
+        except Exception:
+            limit = 120
+        limit = max(1, min(500, limit))
+
+        try:
+            all_products = self.database.get_all_products()
+        except Exception as e:
+            await self.tablet_server._send_error(websocket, f"Erreur lecture produits: {e}")
+            return
+
+        items: List[Dict[str, Any]] = []
+        for product in all_products:
+            category = str(getattr(product, "category", "") or "").strip().lower()
+            is_shampoo = category.startswith("shampoo")
+            if shampoo_only and not is_shampoo:
+                continue
+
+            payload = self._build_tablet_product_payload(product)
+            if not payload.get("image"):
+                payload["image"] = "placeholder.svg"
+            items.append(payload)
+
+        items.sort(key=lambda p: (str(p.get("brand", "")).lower(), str(p.get("name", "")).lower()))
+        await self.tablet_server.send_products_list(websocket, items[:limit])
 
     async def _handle_tablet_start_voice_question(self, websocket, data):
         # Déclenche une fenêtre d'écoute vocale fallback via bouton tablette.
@@ -857,24 +1101,127 @@ class PepperAssistant:
         except Exception:
             pass
 
+        # En mode ALAudioRecorder, ajuster le fallback avec le format réellement observé.
+        vf_config = getattr(self.voice_fallback, "config", None)
+        detected_channels = int(getattr(self.adapter, "_audio_pull_detected_channels", 0) or 0)
+        detected_rate = int(getattr(self.adapter, "_audio_pull_detected_rate", 0) or 0)
+        if vf_config and detected_channels > 0 and vf_config.input_channels != detected_channels:
+            vf_config.input_channels = detected_channels
+            self.logger.log_info(
+                f"  Fallback vocal: canaux audio ajustés à {detected_channels} (ALAudioRecorder)"
+            )
+        if vf_config and detected_rate > 0 and vf_config.input_sample_rate != detected_rate:
+            vf_config.input_sample_rate = detected_rate
+            self.logger.log_info(
+                f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz (ALAudioRecorder)"
+            )
+
         if hasattr(self.voice_fallback, "arm_listen_window"):
             await asyncio.to_thread(self.voice_fallback.arm_listen_window, duration)
 
         if self.adapter and hasattr(self.adapter, "say"):
             await asyncio.to_thread(self.adapter.say, "Je vous écoute.", False)
 
+        self._voice_request_seq += 1
+        request_id = self._voice_request_seq
+        transcript_seq_before = self._voice_transcript_seq
+
         await self.tablet_server.send_security_alert(
             websocket,
             "Question vocale",
             f"Parlez maintenant. Fenêtre d'écoute active pendant {int(duration)} secondes."
         )
+        asyncio.create_task(
+            self._notify_voice_timeout_if_silent(
+                websocket=websocket,
+                request_id=request_id,
+                duration_s=duration,
+                transcript_seq_before=transcript_seq_before,
+            )
+        )
+
+    async def _notify_voice_timeout_if_silent(
+        self,
+        websocket,
+        request_id: int,
+        duration_s: float,
+        transcript_seq_before: int,
+    ):
+        # Message explicite côté tablette si aucune question n'a été captée.
+        await asyncio.sleep(max(1.0, float(duration_s)) + 2.5)
+
+        if request_id != self._voice_request_seq:
+            return
+        if self._voice_transcript_seq > transcript_seq_before:
+            return
+        if not self.tablet_server:
+            return
+
+        try:
+            await self.tablet_server.send_security_alert(
+                websocket,
+                "Question vocale",
+                "Je n'ai pas bien entendu. Rapprochez-vous et parlez clairement, puis réessayez."
+            )
+            if self.adapter and hasattr(self.adapter, "say"):
+                await asyncio.to_thread(
+                    self.adapter.say,
+                    "Je n'ai pas bien entendu. Pouvez-vous répéter, s'il vous plaît ?",
+                    False
+                )
+        except Exception:
+            pass
 
     async def _handle_tablet_ask_question(self, websocket, data):
-        # Désactivé: questions uniquement à l'oral.
-        await self.tablet_server._send_error(
-            websocket,
-            "Question texte désactivée. Utilisez le bouton de question vocale."
-        )
+        # Mode secours: question texte envoyée à OpenAI HTTP puis réponse vocale Pepper.
+        if not self._tablet_text_question_enabled:
+            await self.tablet_server._send_error(
+                websocket,
+                "Question texte désactivée. Utilisez le bouton de question vocale."
+            )
+            return
+
+        question = str((data or {}).get("question") or "").strip()
+        if not question:
+            await self.tablet_server._send_error(websocket, "Question vide.")
+            return
+
+        if not self.http_fallback_client:
+            await self.tablet_server._send_error(
+                websocket,
+                "Module OpenAI HTTP indisponible. Vérifiez la clé API et le réseau."
+            )
+            return
+
+        self.logger.log_info(f"  Tablette: ask_question reçu ({len(question)} caractères)")
+        context = {}
+        if self.orchestrator and hasattr(self.orchestrator, "get_context"):
+            try:
+                context = self.orchestrator.get_context() or {}
+            except Exception:
+                context = {}
+
+        try:
+            answer = await asyncio.to_thread(
+                self.http_fallback_client.ask,
+                question,
+                context
+            )
+        except Exception as e:
+            self.logger.log_warning(f"  ask_question: erreur OpenAI HTTP ({e})")
+            answer = ""
+
+        if not answer:
+            answer = "Je n'arrive pas à répondre pour le moment. Vérifiez le réseau puis réessayez."
+
+        if self.adapter and hasattr(self.adapter, "say"):
+            try:
+                await asyncio.to_thread(self.adapter.say, answer, False)
+            except Exception:
+                pass
+
+        if self.tablet_server and hasattr(self.tablet_server, "send_qa_answer"):
+            await self.tablet_server.send_qa_answer(websocket, question, answer)
 
     def _get_loaded_modules(self) -> list:
         # Retourne la liste des modules charges.

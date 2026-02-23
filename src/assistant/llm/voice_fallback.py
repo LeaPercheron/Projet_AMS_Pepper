@@ -4,16 +4,22 @@
 from __future__ import annotations
 
 import io
+import logging
+import os
 import queue
 import threading
 import time
+import tempfile
 import wave
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional, Dict, Any
 
 import numpy as np
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,6 +37,12 @@ class VoiceFallbackConfig:
     language: str = "fr"
     manual_trigger: bool = False
     listen_window_s: float = 8.0
+    mono_channel_index: int = 2
+    input_gain: float = 1.0
+    local_stt_enabled: bool = True
+    local_stt_model: str = "mlx-community/distil-whisper-large-v3"
+    local_stt_path: str = ""
+    offline_answer_on_error: bool = False
 
 
 class HTTPVoiceFallback:
@@ -67,6 +79,11 @@ class HTTPVoiceFallback:
         self._noise_floor = 0.005
         self._mute_until = 0.0
         self._listen_until = 0.0 if self.config.manual_trigger else float("inf")
+        self._manual_window_samples = []
+        self._manual_window_len_s = 0.0
+        self._local_stt_warned_unavailable = False
+        self._local_stt_warned_model = False
+        self._local_stt_path = self._resolve_local_stt_path()
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -82,6 +99,8 @@ class HTTPVoiceFallback:
             self._thread = None
         self._drain_queue()
         self._reset_vad_state()
+        self._manual_window_samples = []
+        self._manual_window_len_s = 0.0
 
     def ingest(self, audio_bytes: bytes):
         if not audio_bytes or self._stop_event.is_set():
@@ -102,7 +121,11 @@ class HTTPVoiceFallback:
             return
         window = float(duration_s or self.config.listen_window_s)
         self._listen_until = time.time() + max(0.5, window)
+        # Ignore la phrase robot "Je vous écoute" juste après le clic.
+        self._mute_until = time.time() + 1.0
         self._reset_vad_state()
+        self._manual_window_samples = []
+        self._manual_window_len_s = 0.0
         self._drain_queue(max_items=128)
 
     def is_listen_window_open(self) -> bool:
@@ -117,7 +140,24 @@ class HTTPVoiceFallback:
             except queue.Empty:
                 continue
 
-            if self.config.manual_trigger and time.time() > self._listen_until:
+            if self.config.manual_trigger:
+                now = time.time()
+                if now > self._listen_until:
+                    self._finalize_manual_window()
+                    continue
+
+                if now < self._mute_until:
+                    continue
+
+                mono_i16 = self._to_mono_i16(chunk)
+                if mono_i16.size == 0:
+                    continue
+                self._manual_window_samples.append(mono_i16)
+                self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+
+                # Sécurité: si l'utilisateur parle très longtemps, on force un flush.
+                if self._manual_window_len_s >= self.config.max_utterance_s:
+                    self._finalize_manual_window()
                 continue
 
             if time.time() < self._mute_until:
@@ -168,12 +208,22 @@ class HTTPVoiceFallback:
         samples = self._concat_samples(self._speech_samples)
         self._reset_vad_state()
         self._pre_roll.clear()
+        self._finalize_samples(samples, utterance_s)
 
+    def _finalize_manual_window(self):
+        if not self._manual_window_samples:
+            return
+        utterance_s = self._manual_window_len_s
+        samples = self._concat_samples(self._manual_window_samples)
+        self._manual_window_samples = []
+        self._manual_window_len_s = 0.0
+        self._finalize_samples(samples, utterance_s)
+
+    def _finalize_samples(self, samples: np.ndarray, utterance_s: float):
         if utterance_s < self.config.min_utterance_s:
             return
         if samples.size == 0:
             return
-
         try:
             wav_bytes = self._pcm_to_wav(
                 self._resample_i16(samples, self.config.input_sample_rate, self.config.target_sample_rate),
@@ -186,7 +236,14 @@ class HTTPVoiceFallback:
                 self._on_transcript(transcript)
 
             context = self._context_provider() if self._context_provider else {}
-            answer = (self._text_client.ask(transcript, context) or "").strip()
+            try:
+                answer = (self._text_client.ask(transcript, context) or "").strip()
+            except Exception as e:
+                logger.warning(f"Fallback vocal HTTP texte erreur: {e}")
+                if self.config.offline_answer_on_error:
+                    answer = f"J'ai bien entendu: {transcript}"
+                else:
+                    return
             if not answer:
                 return
             if self._on_answer:
@@ -197,19 +254,97 @@ class HTTPVoiceFallback:
             self._speak_callback(answer)
             self._mute_until = time.time() + 0.8
             self._drain_queue(max_items=256)
-        except Exception:
+        except Exception as e:
             # Le fallback ne doit jamais casser le runtime principal.
-            return
+            logger.warning(f"Fallback vocal HTTP erreur: {e}")
 
     def _transcribe_wav(self, wav_bytes: bytes) -> str:
-        bio = io.BytesIO(wav_bytes)
-        bio.name = "pepper_fallback.wav"
-        out = self._openai.audio.transcriptions.create(
-            model=self.config.transcription_model,
-            file=bio,
-            language=self.config.language
-        )
-        return getattr(out, "text", "") or ""
+        try:
+            bio = io.BytesIO(wav_bytes)
+            bio.name = "pepper_fallback.wav"
+            out = self._openai.audio.transcriptions.create(
+                model=self.config.transcription_model,
+                file=bio,
+                language=self.config.language
+            )
+            return getattr(out, "text", "") or ""
+        except Exception as e:
+            if self.config.local_stt_enabled:
+                local_text = self._transcribe_wav_local(wav_bytes)
+                if local_text:
+                    logger.warning(f"OpenAI transcription indisponible ({e}); STT local utilisé.")
+                    return local_text
+            raise
+
+    def _resolve_local_stt_path(self) -> str:
+        explicit = (self.config.local_stt_path or "").strip()
+        if explicit:
+            return explicit
+        env_path = os.getenv("OPENAI_HTTP_LOCAL_STT_PATH", "").strip()
+        if env_path:
+            return env_path
+
+        candidates = [
+            "models--mlx-community--distil-whisper-large-v3",
+            "models--mlx-community--whisper-large-v3-turbo",
+            "models--mlx-community--whisper-small",
+            "models--mlx-community--whisper-base",
+            "models--mlx-community--whisper-tiny",
+        ]
+        hf_root = Path.home() / ".cache" / "huggingface" / "hub"
+        if not hf_root.exists():
+            return ""
+        for model_dir in candidates:
+            snap_dir = hf_root / model_dir / "snapshots"
+            if not snap_dir.exists():
+                continue
+            snapshots = [p for p in snap_dir.iterdir() if p.is_dir()]
+            if not snapshots:
+                continue
+            snapshots.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            return str(snapshots[0])
+        return ""
+
+    def _transcribe_wav_local(self, wav_bytes: bytes) -> str:
+        try:
+            import mlx_whisper
+        except Exception:
+            if not self._local_stt_warned_unavailable:
+                self._local_stt_warned_unavailable = True
+                logger.warning(
+                    "STT local indisponible: paquet mlx-whisper non installé."
+                )
+            return ""
+
+        model_ref = self._local_stt_path or (self.config.local_stt_model or "").strip()
+        if not model_ref:
+            if not self._local_stt_warned_model:
+                self._local_stt_warned_model = True
+                logger.warning("STT local indisponible: aucun modèle local résolu.")
+            return ""
+
+        tmp_path = ""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(wav_bytes)
+                tmp_path = f.name
+            result = mlx_whisper.transcribe(
+                tmp_path,
+                path_or_hf_repo=model_ref,
+                language=self.config.language
+            )
+            if isinstance(result, dict):
+                return (result.get("text") or "").strip()
+            return ""
+        except Exception as e:
+            logger.warning(f"STT local erreur ({model_ref}): {e}")
+            return ""
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
 
     def _drain_queue(self, max_items: int = 1024):
         for _ in range(max_items):
@@ -251,7 +386,14 @@ class HTTPVoiceFallback:
         if frames <= 0:
             return np.array([], dtype=np.int16)
         arr = arr[: frames * ch].reshape(frames, ch).astype(np.float32)
-        mono = np.mean(arr, axis=1)
+        chan_index = int(getattr(self.config, "mono_channel_index", 0) or 0)
+        if 0 <= chan_index < ch:
+            mono = arr[:, chan_index]
+        else:
+            mono = np.mean(arr, axis=1)
+        gain = float(getattr(self.config, "input_gain", 1.0) or 1.0)
+        if gain != 1.0:
+            mono = mono * gain
         return np.clip(mono, -32768, 32767).astype(np.int16)
 
     @staticmethod

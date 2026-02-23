@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Tuple, Union
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
-from PIL import Image
+from PIL import Image, ImageOps, ImageFilter, ImageEnhance
 import io
 
 # Constantes
@@ -231,7 +231,7 @@ class ImageCapture:
 
             except Exception as e:
                 print(f"[ImageCapture] Erreur capture frame {i}: {e}")
-
+                
         return frames
 
     def load_images_from_paths(self, paths: List[str]) -> List[Image.Image]:
@@ -285,6 +285,8 @@ class BarcodeDetector:
     def __init__(self):
         # Initialise l'objet.
         self._pyzbar_available = False
+        self._debug = os.getenv("PEPPER_BARCODE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+        self._deep_search = os.getenv("PEPPER_BARCODE_DEEP_SEARCH", "").strip().lower() in {"1", "true", "yes", "on"}
         try:
             from pyzbar import pyzbar
             self._pyzbar = pyzbar
@@ -308,6 +310,85 @@ class BarcodeDetector:
             if not self._pyzbar_available:
                 print("[BarcodeDetector] pyzbar non disponible - pip install pyzbar")
 
+    @staticmethod
+    def _normalize_barcode_value(code_type: str, raw_value: str) -> Optional[str]:
+        value = str(raw_value or "").strip()
+        code_type = str(code_type or "").strip().upper()
+        if not value:
+            return None
+        if code_type == "UPCA" and len(value) == 12 and value.isdigit():
+            return f"0{value}"
+        if code_type == "EAN13" and len(value) == 13 and value.isdigit():
+            return value
+        return None
+
+    def _build_decode_variants(self, image: Image.Image) -> List[Tuple[str, Image.Image]]:
+        gray = image.convert("L")
+        w, h = gray.size
+        upscaled = gray.resize((max(2, w * 2), max(2, h * 2)), Image.Resampling.BICUBIC)
+        threshold = gray.point(lambda p: 255 if p > 120 else 0)
+        bright = ImageEnhance.Brightness(gray).enhance(1.35)
+        contrast = ImageEnhance.Contrast(gray).enhance(1.45)
+        variants: List[Tuple[str, Image.Image]] = [
+            ("gray", gray),
+            ("autocontrast", ImageOps.autocontrast(gray)),
+            ("sharpen", gray.filter(ImageFilter.SHARPEN)),
+            ("bright", bright),
+            ("contrast", contrast),
+            ("upscale_2x", upscaled),
+            ("threshold", threshold),
+        ]
+        if self._deep_search:
+            darker = ImageEnhance.Brightness(gray).enhance(0.78)
+            strong = ImageEnhance.Contrast(bright).enhance(1.35)
+            variants.extend([
+                ("equalize", ImageOps.equalize(gray)),
+                ("darker", darker),
+                ("bright_contrast", strong),
+            ])
+        return variants
+
+    def _build_search_crops(self, image: Image.Image) -> List[Tuple[str, Image.Image]]:
+        # Le code-barres peut être petit dans l'image: on balaie plusieurs sous-zones.
+        w, h = image.size
+        regions = [
+            ("full", (0.0, 0.0, 1.0, 1.0)),
+            ("center_80", (0.1, 0.1, 0.9, 0.9)),
+            ("left_focus", (0.0, 0.0, 0.65, 0.7)),
+        ]
+
+        if self._deep_search:
+            regions.extend([
+                ("left_top_75", (0.0, 0.0, 0.75, 0.75)),
+                ("right_top_75", (0.25, 0.0, 1.0, 0.75)),
+                ("left_bottom_75", (0.0, 0.25, 0.75, 1.0)),
+                ("right_bottom_75", (0.25, 0.25, 1.0, 1.0)),
+            ])
+            # Fenêtres glissantes (3x3) pour remonter un code-barres petit/hors-centre.
+            win_w = 0.6
+            win_h = 0.6
+            for gy in range(3):
+                for gx in range(3):
+                    x1 = min(0.4, gx * 0.2)
+                    y1 = min(0.4, gy * 0.2)
+                    x2 = min(1.0, x1 + win_w)
+                    y2 = min(1.0, y1 + win_h)
+                    regions.append((f"grid_{gx}_{gy}", (x1, y1, x2, y2)))
+
+        crops: List[Tuple[str, Image.Image]] = []
+        seen_boxes = set()
+        for name, (rx1, ry1, rx2, ry2) in regions:
+            x1 = max(0, min(w - 2, int(w * rx1)))
+            y1 = max(0, min(h - 2, int(h * ry1)))
+            x2 = max(x1 + 2, min(w, int(w * rx2)))
+            y2 = max(y1 + 2, min(h, int(h * ry2)))
+            box_key = (x1, y1, x2, y2)
+            if box_key in seen_boxes:
+                continue
+            seen_boxes.add(box_key)
+            crops.append((name, image.crop((x1, y1, x2, y2))))
+        return crops
+
     def detect_in_images(self, images: List[Image.Image]) -> Optional[BarcodeResult]:
         # Détecte les codes-barres dans plusieurs images.
         if not self._pyzbar_available:
@@ -321,21 +402,44 @@ class BarcodeDetector:
 
         for idx, image in enumerate(images):
             try:
-                # Convertir en grayscale pour meilleure détection
-                gray = image.convert('L')
+                seen_on_this_image = set()
+                crops = self._build_search_crops(image)
+                for crop_name, crop_img in crops:
+                    scales = (1, 2, 3) if self._deep_search else (1, 2)
+                    for scale in scales:
+                        if scale == 1:
+                            scaled = crop_img
+                        else:
+                            scaled = crop_img.resize(
+                                (crop_img.width * scale, crop_img.height * scale),
+                                Image.Resampling.BICUBIC,
+                            )
 
-                # Détecter codes-barres
-                barcodes = self._pyzbar.decode(gray)
+                        variants = self._build_decode_variants(scaled)
+                        for variant_name, variant_image in variants:
+                            barcodes = self._pyzbar.decode(variant_image)
+                            for barcode in barcodes:
+                                try:
+                                    raw_value = barcode.data.decode("utf-8")
+                                except Exception:
+                                    continue
+                                ean = self._normalize_barcode_value(barcode.type, raw_value)
+                                if not ean or ean in seen_on_this_image:
+                                    continue
+                                seen_on_this_image.add(ean)
 
-                for barcode in barcodes:
-                    # Ne garder que les EAN-13
-                    if barcode.type == 'EAN13':
-                        ean = barcode.data.decode('utf-8')
-                        bbox = barcode.rect  # (x, y, w, h)
+                                bbox = barcode.rect  # (x, y, w, h)
+                                if ean not in detections:
+                                    detections[ean] = []
+                                detections[ean].append((idx, (bbox.left, bbox.top, bbox.width, bbox.height)))
 
-                        if ean not in detections:
-                            detections[ean] = []
-                        detections[ean].append((idx, (bbox.left, bbox.top, bbox.width, bbox.height)))
+                                if self._debug:
+                                    print(
+                                        f"[BarcodeDetector] image={idx} crop={crop_name} scale={scale} "
+                                        f"variant={variant_name} type={barcode.type} ean={ean}"
+                                    )
+                    if seen_on_this_image and not self._deep_search:
+                        break
 
             except Exception as e:
                 print(f"[BarcodeDetector] Erreur image {idx}: {e}")
@@ -369,6 +473,8 @@ class BarcodeDetector:
                 image_indices=[occ[0] for occ in occurrences]
             )
 
+        if self._debug:
+            print(f"[BarcodeDetector] Aucun code détecté sur {len(images)} image(s).")
         return None
 
     def detect_single(self, image: Image.Image) -> List[str]:
@@ -377,10 +483,33 @@ class BarcodeDetector:
             return []
 
         try:
-            gray = image.convert('L')
-            barcodes = self._pyzbar.decode(gray)
-            return [b.data.decode('utf-8') for b in barcodes if b.type == 'EAN13']
-        except:
+            values: List[str] = []
+            for _, crop in self._build_search_crops(image):
+                scales = (1, 2, 3) if self._deep_search else (1, 2)
+                for scale in scales:
+                    if scale == 1:
+                        scaled = crop
+                    else:
+                        scaled = crop.resize(
+                            (crop.width * scale, crop.height * scale),
+                            Image.Resampling.BICUBIC,
+                        )
+                    for _, variant in self._build_decode_variants(scaled):
+                        barcodes = self._pyzbar.decode(variant)
+                        for barcode in barcodes:
+                            try:
+                                raw_value = barcode.data.decode("utf-8")
+                            except Exception:
+                                continue
+                            normalized = self._normalize_barcode_value(barcode.type, raw_value)
+                            if normalized and normalized not in values:
+                                values.append(normalized)
+                        if values and not self._deep_search:
+                            return values
+                if values and not self._deep_search:
+                    return values
+            return values
+        except Exception:
             return []
 
 
@@ -412,6 +541,36 @@ class VLMModule:
             lines.append(f"- {p.get('brand', '')} {p.get('name', '')} ({p.get('ean13', '')})")
         return "\n".join(lines)
 
+    @staticmethod
+    def _resolve_local_model_path(model_name: str) -> Optional[str]:
+        # Résout un snapshot local HF pour éviter les appels réseau.
+        env_path = os.getenv("PEPPER_VLM_LOCAL_PATH", "").strip()
+        if env_path and Path(env_path).expanduser().exists():
+            return str(Path(env_path).expanduser())
+
+        if Path(model_name).expanduser().exists():
+            return str(Path(model_name).expanduser())
+
+        model_dir_name = f"models--{model_name.replace('/', '--')}"
+        hf_home = os.getenv("HF_HOME", "").strip()
+        if hf_home:
+            cache_root = Path(hf_home).expanduser() / "hub"
+        else:
+            cache_root = Path.home() / ".cache" / "huggingface" / "hub"
+
+        model_cache_dir = cache_root / model_dir_name
+        snapshots_dir = model_cache_dir / "snapshots"
+        if not snapshots_dir.exists():
+            return None
+
+        snapshot_dirs = [p for p in snapshots_dir.iterdir() if p.is_dir()]
+        if not snapshot_dirs:
+            return None
+
+        # Prendre le snapshot le plus récent.
+        snapshot_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return str(snapshot_dirs[0])
+
     def load_model(self) -> bool:
         # Charge le modèle VLM.
         print("[VLM] Chargement du modèle...")
@@ -422,8 +581,17 @@ class VLMModule:
             from mlx_vlm.prompt_utils import apply_chat_template
             from mlx_vlm.utils import load_config
 
-            self.model, self.processor = load(MODEL_NAME)
-            self.config = load_config(MODEL_NAME)
+            model_ref = MODEL_NAME
+            local_model_path = self._resolve_local_model_path(MODEL_NAME)
+            if local_model_path:
+                model_ref = local_model_path
+                # Si le snapshot local est trouvé, on force l'offline pour éviter
+                # toute requête metadata vers HuggingFace (SSL réseau instable).
+                os.environ.setdefault("HF_HUB_OFFLINE", "1")
+                print(f"[VLM] Chargement local depuis: {model_ref}")
+
+            self.model, self.processor = load(model_ref)
+            self.config = load_config(model_ref)
             self._generate_fn = generate
             self._apply_chat_template = apply_chat_template
 
