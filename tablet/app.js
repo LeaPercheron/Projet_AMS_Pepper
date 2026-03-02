@@ -3,20 +3,53 @@
  * Application JavaScript pour l'interface tactile
  */
 
-// ==================== CONFIGURATION ====================
 const CONFIG = {
-    // URL du serveur Mac (à configurer)
-    serverUrl: 'ws://localhost:8765',
+    // URL du serveur WS: query param ?ws=... > host page > localhost
+    serverUrl: (() => {
+        let wsParam = '';
+        try {
+            wsParam = new URLSearchParams(window.location.search).get('ws') || '';
+        } catch (e) {
+            wsParam = '';
+        }
+        if (wsParam) return wsParam;
 
-    // Timeouts
+        const host = window.location.hostname || 'localhost';
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        return `${protocol}://${host}:8765`;
+    })(),
+    textQuestionEnabled: (() => {
+        try {
+            return (new URLSearchParams(window.location.search).get('textq') || '') === '1';
+        } catch (e) {
+            return false;
+        }
+    })(),
+
+    // Timeouts (0 => pas de timeout côté tablette)
     connectionTimeout: 5000,
-    scanTimeout: 30000,
+    scanTimeout: (() => {
+        try {
+            const v = Number(new URLSearchParams(window.location.search).get('scan_timeout_ms') || '0');
+            return Number.isFinite(v) && v > 0 ? v : 0;
+        } catch (e) {
+            return 0;
+        }
+    })(),
+    voiceListenDurationS: (() => {
+        try {
+            const v = Number(new URLSearchParams(window.location.search).get('voice_duration_s') || '12');
+            return Number.isFinite(v) ? Math.max(3, v) : 12;
+        } catch (e) {
+            return 12;
+        }
+    })(),
+    placeholderImage: 'placeholder.png',
 
     // Debug
     debug: true
 };
 
-// ==================== ÉTAT DE L'APPLICATION ====================
 const AppState = {
     currentScreen: 'home',
     connected: false,
@@ -25,10 +58,10 @@ const AppState = {
     filteredProducts: [],
     currentProduct: null,
     top3Results: [],
-    currentFilter: 'all'
+    currentFilter: 'all',
+    productLockedUntil: 0
 };
 
-// ==================== APPLICATION PRINCIPALE ====================
 const App = {
     /**
      * Initialisation de l'application
@@ -42,10 +75,19 @@ const App = {
         // Tenter la connexion WebSocket
         this.connectWebSocket();
 
+        // Le secours question écrite reste masqué sauf activation explicite.
+        this.configureTextQuestionButton();
+
         // Afficher l'écran d'accueil
         this.showScreen('home');
 
         this.log('Application initialisée');
+    },
+
+    configureTextQuestionButton() {
+        const btn = document.getElementById('text-question-btn');
+        if (!btn) return;
+        btn.style.display = CONFIG.textQuestionEnabled ? '' : 'none';
     },
 
     /**
@@ -64,7 +106,71 @@ const App = {
         if (screen) {
             screen.classList.add('active');
             AppState.currentScreen = screenId;
+            if (screenId === 'barcode-scan') {
+                this.updateBarcodeStatus('waiting', 'En attente du code-barres...');
+            }
+            if (screenId === 'advice') {
+                this.requestProducts();
+            }
         }
+    },
+
+    normalizeText(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+    },
+
+    toAbsoluteUrl(value) {
+        const text = String(value || '').trim();
+        if (!text) return '';
+        if (/^(https?:|wss?:|data:|blob:|file:|\/)/i.test(text)) {
+            return text;
+        }
+        try {
+            return new URL(text, window.location.href).toString();
+        } catch (e) {
+            return text;
+        }
+    },
+
+    createProductPlaceholder() {
+        return this.toAbsoluteUrl(CONFIG.placeholderImage);
+    },
+
+    resolveImageUrl(imageUrl, product = null) {
+        const value = String(imageUrl || '').trim();
+        const isGenericPlaceholder = (
+            !value
+            || value === CONFIG.placeholderImage
+            || value.endsWith('/placeholder.svg')
+            || value.endsWith('/placeholder.png')
+        );
+        if (isGenericPlaceholder) {
+            return this.createProductPlaceholder(product || {});
+        }
+        return this.toAbsoluteUrl(value);
+    },
+
+    inferProductCategories(product) {
+        const haystack = this.normalizeText([
+            product.hair_type || '',
+            product.usage || '',
+            product.name || '',
+            product.brand || ''
+        ].join(' '));
+
+        const categories = [];
+        if (/(sec|deshydrat|hydrat|nourri|nutrition)/.test(haystack)) categories.push('secs');
+        if (/(gras|sebo|seborr)/.test(haystack)) categories.push('gras');
+        if (/(tous types|tout type|normal|usage quotidien|frequent|doux)/.test(haystack)) categories.push('normaux');
+        if (/(color|mech)/.test(haystack)) categories.push('colores');
+        if (/(pellic|anti[ -]?pellic|dermite|ds\+?)/.test(haystack)) categories.push('pellicules');
+        if (/(sensible|reactif|hypersens|irrit|delicat)/.test(haystack)) categories.push('sensibles');
+        if (/(abime|fragil|repar|casse|chute|fortifi)/.test(haystack)) categories.push('abimes');
+        if (categories.length === 0) categories.push('autres');
+        return categories;
     },
 
     /**
@@ -83,15 +189,74 @@ const App = {
         this.showLoading('Analyse du produit en cours...');
 
         // Envoyer commande au serveur
-        this.sendCommand('start_visual_scan');
+        const sent = this.sendCommand('start_visual_scan');
+        if (!sent) {
+            this.showScreen('scan-choice');
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
 
-        // Timeout de sécurité
-        setTimeout(() => {
-            if (AppState.currentScreen === 'loading') {
-                this.showScreen('scan-choice');
-                this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
-            }
-        }, CONFIG.scanTimeout);
+        if (CONFIG.scanTimeout > 0) {
+            setTimeout(() => {
+                if (AppState.currentScreen === 'loading') {
+                    this.showScreen('scan-choice');
+                    this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
+                }
+            }, CONFIG.scanTimeout);
+        }
+    },
+
+    /**
+     * Démarrer le scan code-barres
+     */
+    startBarcodeScan() {
+        this.log('Démarrage scan code-barres');
+        this.showScreen('barcode-scan');
+        this.updateBarcodeStatus('waiting', 'Recherche du code-barres...');
+
+        const sent = this.sendCommand('start_barcode_scan');
+        if (!sent) {
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
+
+        if (CONFIG.scanTimeout > 0) {
+            setTimeout(() => {
+                if (AppState.currentScreen === 'barcode-scan') {
+                    this.updateBarcodeStatus('error', 'Le scan a pris trop de temps. Réessayez.');
+                }
+            }, CONFIG.scanTimeout);
+        }
+    },
+
+    /**
+     * Démarrer une question vocale fallback
+     */
+    startVoiceQuestion() {
+        this.log('Démarrage question vocale fallback');
+        const sent = this.sendCommand('start_voice_question', { duration_s: CONFIG.voiceListenDurationS });
+        if (!sent) {
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
+        this.showLoading('Micro activé. Parlez maintenant...');
+    },
+
+    askTextQuestion() {
+        if (!CONFIG.textQuestionEnabled) {
+            return;
+        }
+        const question = window.prompt('Entrez votre question sur le shampooing :');
+        const text = String(question || '').trim();
+        if (!text) {
+            return;
+        }
+        const sent = this.sendCommand('ask_question', { question: text });
+        if (!sent) {
+            this.showError('Connexion tablette indisponible.');
+            return;
+        }
+        this.showLoading('Question envoyée à Pepper...');
     },
 
     /**
@@ -111,10 +276,17 @@ const App = {
 
             card.innerHTML = `
                 <div class="top3-card-number">${index + 1}</div>
-                <img class="top3-card-image" src="${result.image || 'placeholder.png'}" alt="${result.name}">
+                <img class="top3-card-image" src="${this.resolveImageUrl(result.image, result)}" alt="${result.name}">
                 <p class="top3-card-name">${result.name}</p>
                 <p class="top3-card-confidence">${Math.round(result.confidence * 100)}% de confiance</p>
             `;
+            const img = card.querySelector('.top3-card-image');
+            if (img) {
+                img.onerror = () => {
+                    img.onerror = null;
+                    img.src = this.resolveImageUrl('', result);
+                };
+            }
 
             container.appendChild(card);
         });
@@ -130,7 +302,7 @@ const App = {
         if (result) {
             this.log(`Produit sélectionné: ${result.name}`);
             this.sendCommand('confirm_product', { ean: result.ean, index: index });
-            this.showProduct(result);
+            this.showLoading('Validation du produit...');
         }
     },
 
@@ -141,8 +313,14 @@ const App = {
         this.log('Affichage produit', product);
 
         AppState.currentProduct = product;
+        AppState.productLockedUntil = Date.now() + 15000;
 
-        document.getElementById('product-image').src = product.image || 'placeholder.png';
+        const image = document.getElementById('product-image');
+        image.src = this.resolveImageUrl(product.image, product);
+        image.onerror = () => {
+            image.onerror = null;
+            image.src = this.resolveImageUrl('', product);
+        };
         document.getElementById('product-name').textContent = product.name || 'Produit inconnu';
         document.getElementById('product-brand').textContent = product.brand || '';
         document.getElementById('product-price').textContent = product.price ? `${product.price.toFixed(2)} €` : 'Prix non disponible';
@@ -168,9 +346,12 @@ const App = {
         if (filter === 'all') {
             AppState.filteredProducts = [...AppState.products];
         } else {
-            AppState.filteredProducts = AppState.products.filter(p => {
-                const hairType = (p.hair_type || '').toLowerCase();
-                return hairType.includes(filter.toLowerCase());
+            AppState.filteredProducts = AppState.products.filter((p) => {
+                const categories = Array.isArray(p._categories)
+                    ? p._categories
+                    : this.inferProductCategories(p);
+                p._categories = categories;
+                return categories.includes(filter);
             });
         }
 
@@ -191,10 +372,18 @@ const App = {
             item.onclick = () => this.showProduct(product);
 
             item.innerHTML = `
-                <img src="${product.image || 'placeholder.png'}" alt="${product.name}">
+                <img src="${this.resolveImageUrl(product.image, product)}" alt="${product.name}">
                 <p class="name">${product.name}</p>
+                <p class="brand">${product.brand || ''}</p>
                 <p class="price">${product.price ? product.price.toFixed(2) + ' €' : ''}</p>
             `;
+            const img = item.querySelector('img');
+            if (img) {
+                img.onerror = () => {
+                    img.onerror = null;
+                    img.src = this.resolveImageUrl('', product);
+                };
+            }
 
             container.appendChild(item);
         });
@@ -242,7 +431,6 @@ const App = {
         text.textContent = message;
     },
 
-    // ==================== WEBSOCKET ====================
 
     /**
      * Connexion WebSocket au serveur Mac
@@ -256,11 +444,14 @@ const App = {
             AppState.ws.onopen = () => {
                 this.log('WebSocket connecté');
                 AppState.connected = true;
+                this.updateConnectionStatus('Connecté');
+                this.requestProducts();
             };
 
             AppState.ws.onclose = () => {
                 this.log('WebSocket déconnecté');
                 AppState.connected = false;
+                this.updateConnectionStatus('Déconnecté');
 
                 // Tentative de reconnexion après 5s
                 setTimeout(() => this.connectWebSocket(), 5000);
@@ -268,6 +459,7 @@ const App = {
 
             AppState.ws.onerror = (error) => {
                 this.log('Erreur WebSocket', error);
+                this.updateConnectionStatus('Erreur');
             };
 
             AppState.ws.onmessage = (event) => {
@@ -337,13 +529,59 @@ const App = {
                     break;
 
                 case 'show_screen':
-                    this.showScreen(message.screen);
+                    {
+                        const nextScreen = message.screen || 'home';
+                        if (
+                            AppState.currentScreen === 'product'
+                            && Date.now() < (AppState.productLockedUntil || 0)
+                            && nextScreen !== 'home'
+                            && nextScreen !== 'product'
+                        ) {
+                            this.log('show_screen ignoré (fiche produit verrouillée):', nextScreen);
+                        } else {
+                            this.showScreen(nextScreen);
+                        }
+                    }
                     break;
 
                 case 'products_list':
-                    AppState.products = message.products;
+                    AppState.products = (message.products || []).map((p) => {
+                        const product = { ...(p || {}) };
+                        if (Array.isArray(product.hair_type)) {
+                            product.hair_type = product.hair_type.join(', ');
+                        }
+                        product._categories = this.inferProductCategories(product);
+                        product.image = this.resolveImageUrl(product.image, product);
+                        return product;
+                    });
                     this.filterProducts('all');
                     break;
+
+                case 'status':
+                    this.updateConnectionStatus(
+                        message.status === 'connected'
+                            ? 'Connecté'
+                            : (message.status || 'Inconnu')
+                    );
+                    break;
+
+                case 'qa_answer':
+                    this.showSecurityMessage('Réponse Pepper', message.answer || 'Réponse vide');
+                    break;
+
+                case 'voice_status': {
+                    const status = String(message.status || '').toLowerCase();
+                    const title = message.title || 'Question vocale';
+                    const text = message.message || '';
+                    if (status === 'listening' || status === 'processing') {
+                        this.showLoading(text || 'Traitement vocal en cours...');
+                    } else if (status === 'timeout' || status === 'error') {
+                        this.showSecurityMessage(title, text || "Je n'ai pas bien entendu.");
+                    } else if (status === 'done' && AppState.currentScreen === 'loading') {
+                        this.showScreen('advice');
+                    }
+                    break;
+                }
 
                 default:
                     this.log('Message non géré:', message.type);
@@ -354,7 +592,23 @@ const App = {
         }
     },
 
-    // ==================== UTILITAIRES ====================
+    /**
+     * Mettre à jour le statut WebSocket affiché
+     */
+    updateConnectionStatus(statusText) {
+        const statusEl = document.getElementById('ws-status');
+        if (statusEl) {
+            statusEl.textContent = `WebSocket: ${statusText}`;
+        }
+    },
+
+    requestProducts() {
+        const sent = this.sendCommand('get_products', { shampoo_only: true, limit: 200 });
+        if (!sent) {
+            this.log('Demande produits ignorée: WS non connectée');
+        }
+    },
+
 
     /**
      * Logger avec horodatage
@@ -377,7 +631,7 @@ const App = {
                 price: 9.50,
                 usage: 'Shampooing doux pour usage fréquent. Appliquer sur cheveux mouillés, masser et rincer.',
                 hair_type: 'Tous types',
-                image: 'https://via.placeholder.com/200x200?text=Klorane'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3600523735501',
@@ -386,7 +640,7 @@ const App = {
                 price: 4.90,
                 usage: 'Protection couleur pour cheveux colorés. Usage quotidien possible.',
                 hair_type: 'Cheveux colorés',
-                image: 'https://via.placeholder.com/200x200?text=Elseve'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3600542154796',
@@ -395,7 +649,7 @@ const App = {
                 price: 3.80,
                 usage: 'Shampooing nourrissant au miel. Répare et renforce les cheveux.',
                 hair_type: 'Cheveux secs',
-                image: 'https://via.placeholder.com/200x200?text=Garnier'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3282779354424',
@@ -404,7 +658,7 @@ const App = {
                 price: 14.90,
                 usage: 'Stimule la croissance des cheveux. Usage 2-3 fois par semaine.',
                 hair_type: 'Cheveux fragilisés',
-                image: 'https://via.placeholder.com/200x200?text=Furterer'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3282770107357',
@@ -413,7 +667,7 @@ const App = {
                 price: 11.90,
                 usage: 'Rééquilibre le cuir chevelu. Convient aux cuirs chevelus sensibles.',
                 hair_type: 'Cuir chevelu sensible',
-                image: 'https://via.placeholder.com/200x200?text=Ducray'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3401360262652',
@@ -422,7 +676,7 @@ const App = {
                 price: 10.50,
                 usage: 'Shampooing quotidien non détergent. Respecte l\'équilibre du cuir chevelu.',
                 hair_type: 'Tous types',
-                image: 'https://via.placeholder.com/200x200?text=Bioderma'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3337871324568',
@@ -431,7 +685,7 @@ const App = {
                 price: 12.90,
                 usage: 'Élimine les pellicules dès la première application. Usage 2-3 fois/semaine.',
                 hair_type: 'Pellicules',
-                image: 'https://via.placeholder.com/200x200?text=Vichy'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3338221000125',
@@ -440,7 +694,7 @@ const App = {
                 price: 13.50,
                 usage: 'Répare les cheveux très abîmés. Kératine végétale.',
                 hair_type: 'Cheveux abîmés',
-                image: 'https://via.placeholder.com/200x200?text=Phyto'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3433422404847',
@@ -449,7 +703,7 @@ const App = {
                 price: 15.90,
                 usage: 'Réduit la chute de cheveux. Enrichi en Madécassoside.',
                 hair_type: 'Chute de cheveux',
-                image: 'https://via.placeholder.com/200x200?text=LRP'
+                image: CONFIG.placeholderImage
             },
             {
                 ean: '3264680003783',
@@ -458,7 +712,7 @@ const App = {
                 price: 11.50,
                 usage: 'Shampooing doux et nourrissant au miel. Pour cheveux normaux à secs.',
                 hair_type: 'Cheveux normaux à secs',
-                image: 'https://via.placeholder.com/200x200?text=Nuxe'
+                image: CONFIG.placeholderImage
             }
         ];
 
@@ -467,10 +721,19 @@ const App = {
     }
 };
 
-// ==================== DÉMARRAGE ====================
-document.addEventListener('DOMContentLoaded', () => {
+function bootstrapApp() {
+    if (window.__PEPPER_APP_BOOTSTRAPPED__) {
+        return;
+    }
+    window.__PEPPER_APP_BOOTSTRAPPED__ = true;
     App.init();
-});
+}
 
 // Exposer l'application globalement pour les onclick HTML
 window.App = App;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrapApp);
+} else {
+    bootstrapApp();
+}

@@ -1,8 +1,4 @@
-"""
-Adaptateur Mock (Simulation)
-============================
-Implementation simulee pour tests sans robot physique.
-"""
+# Adaptateur Mock (Simulation)
 
 import threading
 import time
@@ -13,17 +9,10 @@ from .base import RobotAdapter, AdapterConfig, LEDColor
 
 
 class MockAdapter(RobotAdapter):
-    """
-    Adaptateur de simulation pour tests sans robot.
-
-    Simule toutes les fonctionnalites de Pepper:
-    - Audio: Genere un signal de test ou utilise le micro local
-    - LEDs: Affiche les changements en console
-    - Camera: Retourne une image de test
-    - TTS: Affiche le texte en console
-    """
+    # Adaptateur de simulation pour tests sans robot.
 
     def __init__(self, config: Optional[AdapterConfig] = None):
+        # Initialise l'objet.
         super().__init__(config)
 
         # Etat simulation
@@ -48,12 +37,10 @@ class MockAdapter(RobotAdapter):
         self._audio_frames_received = 0
         self._video_frames_sent = 0
 
-    # =====================================================================
     # CONNEXION
-    # =====================================================================
 
     def connect(self) -> bool:
-        """Simule une connexion reussie."""
+        # Simule une connexion reussie.
         print("[Mock] Connexion simulee...")
         time.sleep(0.2)  # Simule delai
         self._is_connected = True
@@ -61,19 +48,17 @@ class MockAdapter(RobotAdapter):
         return True
 
     def disconnect(self):
-        """Simule une deconnexion."""
+        # Simule une deconnexion.
         self.stop_audio_capture()
         self.stop_audio_playback()
         self.stop_video_stream()
         self._is_connected = False
         print("[Mock] Deconnecte (simulation)")
 
-    # =====================================================================
     # AUDIO
-    # =====================================================================
 
     def start_audio_capture(self, callback: Callable[[bytes], None]) -> bool:
-        """Demarre la capture audio simulee."""
+        # Demarre la capture audio simulee.
         if self._is_capturing:
             return True
 
@@ -90,7 +75,7 @@ class MockAdapter(RobotAdapter):
         return True
 
     def _mock_audio_capture(self):
-        """Genere un signal audio simule (sinusoide + bruit)."""
+        # Genere un signal audio simule (sinusoide + bruit).
         sample_rate = self.config.sample_rate
         channels = self.config.channels_in
         buffer_size = 1024  # Samples par canal
@@ -137,7 +122,7 @@ class MockAdapter(RobotAdapter):
             time.sleep(buffer_size / sample_rate)
 
     def stop_audio_capture(self):
-        """Arrete la capture audio simulee."""
+        # Arrete la capture audio simulee.
         self._is_capturing = False
         if self._capture_thread:
             self._capture_thread.join(timeout=2.0)
@@ -145,7 +130,7 @@ class MockAdapter(RobotAdapter):
         print("[Mock] Capture audio arretee")
 
     def play_audio(self, audio_bytes: bytes) -> bool:
-        """Simule la lecture audio (affiche stats)."""
+        # Simule la lecture audio (affiche stats).
         if not self._is_connected:
             return False
 
@@ -159,16 +144,14 @@ class MockAdapter(RobotAdapter):
         return True
 
     def stop_audio_playback(self):
-        """Arrete la lecture audio simulee."""
+        # Arrete la lecture audio simulee.
         self._is_playing = False
         print(f"[Mock] Playback arrete ({self._audio_frames_received} frames recues)")
 
-    # =====================================================================
     # LEDs
-    # =====================================================================
 
     def set_led_color(self, color: LEDColor, fade: bool = True):
-        """Simule un changement de couleur LED."""
+        # Simule un changement de couleur LED.
         old_color = self._current_led_color
         self._current_led_color = color
 
@@ -176,16 +159,14 @@ class MockAdapter(RobotAdapter):
         print(f"[Mock] LEDs: {old_color.name} -> {color.name}{fade_str}")
 
     def set_led_rgb(self, r: int, g: int, b: int, fade: bool = True):
-        """Simule un changement de couleur LED RGB."""
+        # Simule un changement de couleur LED RGB.
         fade_str = " (fade)" if fade else ""
         print(f"[Mock] LEDs: RGB({r}, {g}, {b}){fade_str}")
 
-    # =====================================================================
     # CAMERA
-    # =====================================================================
 
     def capture_image(self) -> Optional[bytes]:
-        """Retourne une image de test (carré colore)."""
+        # Retourne une image de test (carré colore).
         # Generer une image RGB simple (10x10 pixels)
         width, height = 100, 100
         pixels = []
@@ -201,7 +182,7 @@ class MockAdapter(RobotAdapter):
         return bytes(pixels)
 
     def start_video_stream(self, callback: Callable[[bytes], None]) -> bool:
-        """Demarre un flux video simule."""
+        # Demarre un flux video simule.
         if self._is_streaming_video:
             return True
 
@@ -218,7 +199,7 @@ class MockAdapter(RobotAdapter):
         return True
 
     def _mock_video_stream(self):
-        """Genere des frames video simulees."""
+        # Genere des frames video simulees.
         while self._is_streaming_video:
             frame = self.capture_image()
             if frame and self._video_callback:
@@ -227,19 +208,17 @@ class MockAdapter(RobotAdapter):
             time.sleep(0.1)  # 10 fps
 
     def stop_video_stream(self):
-        """Arrete le flux video simule."""
+        # Arrete le flux video simule.
         self._is_streaming_video = False
         if self._video_thread:
             self._video_thread.join(timeout=2.0)
             self._video_thread = None
         print(f"[Mock] Stream video arrete ({self._video_frames_sent} frames)")
 
-    # =====================================================================
     # PAROLE
-    # =====================================================================
 
     def say(self, text: str, blocking: bool = False) -> bool:
-        """Simule la parole (affiche en console)."""
+        # Simule la parole (affiche en console).
         self._is_speaking = True
         print(f"[Mock] TTS: \"{text}\"")
 
@@ -252,65 +231,57 @@ class MockAdapter(RobotAdapter):
         return True
 
     def stop_speaking(self):
-        """Interrompt la parole simulee."""
+        # Interrompt la parole simulee.
         self._is_speaking = False
         print("[Mock] TTS interrompu")
 
-    # =====================================================================
     # DETECTION PRESENCE
-    # =====================================================================
 
     def is_person_present(self) -> bool:
-        """Retourne l'etat de presence simule."""
+        # Retourne l'etat de presence simule.
         return self._person_present
 
     def get_person_distance(self) -> Optional[float]:
-        """Retourne la distance simulee."""
+        # Retourne la distance simulee.
         if self._person_present:
             return self._person_distance
         return None
 
     def set_person_present(self, present: bool, distance: float = 1.5):
-        """Configure la simulation de presence."""
+        # Configure la simulation de presence.
         self._person_present = present
         self._person_distance = distance
         print(f"[Mock] Presence: {present}, distance: {distance}m")
 
-    # =====================================================================
     # TABLETTE
-    # =====================================================================
 
     def show_on_tablet(self, url: str) -> bool:
-        """Simule l'affichage sur tablette."""
+        # Simule l'affichage sur tablette.
         print(f"[Mock] Tablette: {url}")
         return True
 
     def hide_tablet(self):
-        """Simule le masquage de la tablette."""
+        # Simule le masquage de la tablette.
         print("[Mock] Tablette masquee")
 
-    # =====================================================================
     # MOUVEMENTS
-    # =====================================================================
 
     def wave(self):
-        """Simule un geste de salut."""
+        # Simule un geste de salut.
         print("[Mock] Geste: salut")
 
     def nod(self):
-        """Simule un hochement de tete."""
+        # Simule un hochement de tete.
         print("[Mock] Geste: hochement")
 
     def point_at_tablet(self):
-        """Simule pointer vers tablette."""
+        # Simule pointer vers tablette.
         print("[Mock] Geste: pointe tablette")
 
-    # =====================================================================
     # UTILITAIRES
-    # =====================================================================
 
     def get_status(self) -> dict:
-        """Retourne l'etat de la simulation."""
+        # Retourne l'etat de la simulation.
         return {
             "type": "mock",
             "is_connected": self._is_connected,

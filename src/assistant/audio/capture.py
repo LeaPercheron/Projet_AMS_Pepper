@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 1 - Module de Capture Audio Pepper
-========================================
-S'abonne à ALAudioDevice pour capturer le flux 4 canaux 48kHz.
-Envoie les buffers vers le Mac via socket TCP.
-
-Ce script s'exécute SUR LE ROBOT PEPPER.
-
-Usage:
-    python audio_capture.py --mac-ip 192.168.1.50 --port 5555
-"""
+# Phase 1 - Module de Capture Audio Pepper
 
 import argparse
 import sys
@@ -33,12 +23,10 @@ VERSION = 1
 
 
 class AudioCaptureModule:
-    """
-    Module NAOqi pour capturer l'audio depuis ALAudioDevice.
-    Implémente le pattern subscriber avec callback processRemote.
-    """
+    # Module NAOqi pour capturer l'audio depuis ALAudioDevice.
 
     def __init__(self, name: str = "AudioCaptureModule"):
+        # Initialise l'objet.
         self.name = name
         self.is_running = False
         self.audio_buffer = []
@@ -50,6 +38,7 @@ class AudioCaptureModule:
         self.total_bytes = 0
 
     def processRemote(self, nbOfChannels: int, nbrOfSamplesByChannel: int,
+                      # Gere l'action.
                       aTimeStamp: list, buffer: bytes):
         """
         Callback appelé par ALAudioDevice à chaque nouveau buffer audio.
@@ -83,18 +72,18 @@ class AudioCaptureModule:
             )
 
     def start(self):
-        """Démarre la capture."""
+        # Démarre la capture.
         self.is_running = True
         self.start_time = time.time()
         self.frames_captured = 0
         self.total_bytes = 0
 
     def stop(self):
-        """Arrête la capture."""
+        # Arrête la capture.
         self.is_running = False
 
     def get_stats(self) -> dict:
-        """Retourne les statistiques de capture."""
+        # Retourne les statistiques de capture.
         elapsed = time.time() - self.start_time if self.start_time > 0 else 0
         return {
             'frames_captured': self.frames_captured,
@@ -106,12 +95,10 @@ class AudioCaptureModule:
 
 
 class TCPAudioSender:
-    """
-    Envoie les buffers audio vers le Mac via TCP.
-    Gère la connexion, reconnexion et le protocole.
-    """
+    # Envoie les buffers audio vers le Mac via TCP.
 
     def __init__(self, mac_ip: str, port: int):
+        # Initialise l'objet.
         self.mac_ip = mac_ip
         self.port = port
         self.socket: Optional[socket.socket] = None
@@ -128,7 +115,7 @@ class TCPAudioSender:
         self._lock = threading.Lock()
 
     def connect(self) -> bool:
-        """Établit la connexion TCP vers le Mac."""
+        # Établit la connexion TCP vers le Mac.
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -151,7 +138,7 @@ class TCPAudioSender:
             return False
 
     def _send_handshake(self):
-        """Envoie le handshake initial avec les paramètres audio."""
+        # Envoie le handshake initial avec les paramètres audio.
         # Format: MAGIC(4) + VERSION(1) + SAMPLE_RATE(4) + CHANNELS(1) + SAMPLE_WIDTH(1)
         handshake = struct.pack(
             '<4sBIBB',
@@ -164,15 +151,7 @@ class TCPAudioSender:
         self.socket.sendall(handshake)
 
     def send_audio(self, audio_data: bytes, timestamp_sec: int, timestamp_usec: int) -> bool:
-        """
-        Envoie un buffer audio avec son timestamp.
-
-        Format du paquet:
-        - Header (4 bytes): Taille des données
-        - Timestamp sec (4 bytes): Secondes
-        - Timestamp usec (4 bytes): Microsecondes
-        - Data (N bytes): Données audio PCM
-        """
+        # Envoie un buffer audio avec son timestamp.
         if not self.is_connected:
             return False
 
@@ -201,13 +180,13 @@ class TCPAudioSender:
                 return False
 
     def reconnect(self) -> bool:
-        """Tente de se reconnecter."""
+        # Tente de se reconnecter.
         self.close()
         time.sleep(self.reconnect_delay)
         return self.connect()
 
     def close(self):
-        """Ferme la connexion."""
+        # Ferme la connexion.
         if self.socket:
             try:
                 self.socket.close()
@@ -217,7 +196,7 @@ class TCPAudioSender:
         self.is_connected = False
 
     def get_stats(self) -> dict:
-        """Retourne les statistiques d'envoi."""
+        # Retourne les statistiques d'envoi.
         return {
             'packets_sent': self.packets_sent,
             'bytes_sent': self.bytes_sent,
@@ -227,12 +206,10 @@ class TCPAudioSender:
 
 
 class PepperAudioCapture:
-    """
-    Classe principale orchestrant la capture audio sur Pepper
-    et l'envoi vers le Mac.
-    """
+    # Classe principale orchestrant la capture audio sur Pepper
 
     def __init__(self, pepper_ip: str, pepper_port: int,
+                 # Initialise l'objet.
                  mac_ip: str, mac_port: int):
         self.pepper_ip = pepper_ip
         self.pepper_port = pepper_port
@@ -250,6 +227,7 @@ class PepperAudioCapture:
         self.buffer_size = BUFFER_SIZE
 
     def _on_audio_data(self, audio_data: bytes, channels: int,
+                       # Gere audio data.
                        samples_per_channel: int, timestamp: list):
         """Callback appelé pour chaque buffer audio capturé."""
         if not self.tcp_sender.is_connected:
@@ -264,7 +242,7 @@ class PepperAudioCapture:
         self.tcp_sender.send_audio(audio_data, ts_sec, ts_usec)
 
     def start(self) -> bool:
-        """Démarre la capture audio."""
+        # Démarre la capture audio.
         try:
             # Importer qi ici pour éviter erreur si pas sur Pepper
             import qi
@@ -311,7 +289,7 @@ class PepperAudioCapture:
             return False
 
     def _start_simulation(self) -> bool:
-        """Mode simulation pour tests sans Pepper."""
+        # Mode simulation pour tests sans Pepper.
         print("[CAPTURE] Démarrage en mode SIMULATION")
 
         # Connecter au Mac
@@ -324,6 +302,7 @@ class PepperAudioCapture:
 
         # Thread de simulation
         def simulate_audio():
+            # Gere audio.
             import math
             sample_count = 0
 
@@ -359,7 +338,7 @@ class PepperAudioCapture:
         return True
 
     def stop(self):
-        """Arrête la capture audio."""
+        # Arrête la capture audio.
         self.is_running = False
 
         if self.capture_module:
@@ -381,7 +360,7 @@ class PepperAudioCapture:
         print("[CAPTURE] Capture arrêtée")
 
     def print_stats(self):
-        """Affiche les statistiques."""
+        # Affiche les statistiques.
         capture_stats = self.capture_module.get_stats()
         tcp_stats = self.tcp_sender.get_stats()
 
@@ -397,6 +376,7 @@ class PepperAudioCapture:
 
 
 def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(
         description="Capture audio Pepper vers Mac - Phase 1",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -449,6 +429,7 @@ Exemples:
 
     # Gestion Ctrl+C
     def signal_handler(sig, frame):
+        # Gere handler.
         print("\n[CAPTURE] Arrêt demandé...")
         capture.stop()
         capture.print_stats()

@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 7 - Module Sécurité
-=========================
-Protections obligatoires pour l'assistant parapharmacie.
-- Détection médicaments par EAN
-- Filtre mots-clés médicaux (< 1ms)
-- Phrases de sécurité pré-générées
-- Actions robot (LEDs, gestes)
-
-Usage:
-    from security_module import SecurityModule, SecurityAlert
-
-    security = SecurityModule()
-    alert = security.check_text("J'ai mal à la tête")
-    if alert.triggered:
-        print(alert.response)
-"""
+# Phase 7 - Module Sécurité
 
 import os
 import re
@@ -30,9 +14,7 @@ from enum import Enum
 import hashlib
 
 
-# =============================================================================
 # CONFIGURATION
-# =============================================================================
 
 # Dossier pour les fichiers audio pré-générés
 AUDIO_DIR = Path(__file__).parent / "audio"
@@ -41,12 +23,10 @@ AUDIO_DIR = Path(__file__).parent / "audio"
 FILTER_LATENCY_TARGET_MS = 1.0
 
 
-# =============================================================================
 # TYPES D'ALERTES
-# =============================================================================
 
 class AlertType(Enum):
-    """Types d'alertes de sécurité."""
+    # Types d'alertes de sécurité.
     NONE = "none"                    # Pas d'alerte
     MEDICATION = "medication"         # Médicament détecté (EAN)
     MEDICAL_KEYWORD = "medical"       # Mot-clé médical détecté
@@ -56,20 +36,18 @@ class AlertType(Enum):
 
 
 class AlertSeverity(Enum):
-    """Gravité de l'alerte."""
+    # Gravité de l'alerte.
     LOW = "low"           # Information simple
     MEDIUM = "medium"     # Redirection pharmacien
     HIGH = "high"         # Refus catégorique
     CRITICAL = "critical"  # Alerte urgente
 
 
-# =============================================================================
 # STRUCTURES DE DONNÉES
-# =============================================================================
 
 @dataclass
 class SecurityAlert:
-    """Résultat d'une vérification de sécurité."""
+    # Résultat d'une vérification de sécurité.
     triggered: bool = False
     alert_type: AlertType = AlertType.NONE
     severity: AlertSeverity = AlertSeverity.LOW
@@ -83,7 +61,7 @@ class SecurityAlert:
 
 @dataclass
 class SecurityConfig:
-    """Configuration du module de sécurité."""
+    # Configuration du module de sécurité.
     enable_ean_check: bool = True
     enable_keyword_filter: bool = True
     enable_dangerous_use_check: bool = True
@@ -92,9 +70,7 @@ class SecurityConfig:
     strict_mode: bool = True  # Refuse tout terme médical
 
 
-# =============================================================================
 # MOTS-CLÉS MÉDICAUX
-# =============================================================================
 
 # Liste des mots-clés médicaux à détecter
 MEDICAL_KEYWORDS = {
@@ -178,9 +154,7 @@ MEDICAL_CONDITIONS = {
 }
 
 
-# =============================================================================
 # RÉPONSES PRÉ-GÉNÉRÉES
-# =============================================================================
 
 SECURITY_RESPONSES = {
     "medical_generic": {
@@ -221,16 +195,13 @@ SECURITY_RESPONSES = {
 }
 
 
-# =============================================================================
 # MODULE SÉCURITÉ
-# =============================================================================
 
 class SecurityModule:
-    """
-    Module de sécurité pour l'assistant parapharmacie.
-    """
+    # Module de sécurité pour l'assistant parapharmacie.
 
     def __init__(
+        # Initialise l'objet.
         self,
         config: Optional[SecurityConfig] = None,
         blacklist_path: Optional[str] = None
@@ -264,7 +235,7 @@ class SecurityModule:
         AUDIO_DIR.mkdir(exist_ok=True)
 
     def _compile_patterns(self):
-        """Compile les patterns regex pour performance optimale."""
+        # Compile les patterns regex pour performance optimale.
         # Pattern pour mots médicaux (boundary matching)
         all_medical = MEDICAL_KEYWORDS | MEDICAL_CONDITIONS
         pattern = r'\b(' + '|'.join(re.escape(w) for w in all_medical) + r')\b'
@@ -279,7 +250,7 @@ class SecurityModule:
         self._animal_pattern = re.compile(pattern, re.IGNORECASE)
 
     def _load_blacklist(self, path: str):
-        """Charge la blacklist depuis un fichier JSON."""
+        # Charge la blacklist depuis un fichier JSON.
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -301,20 +272,10 @@ class SecurityModule:
         except Exception as e:
             print(f"[SECURITY] Erreur chargement blacklist: {e}")
 
-    # =========================================================================
     # VÉRIFICATIONS
-    # =========================================================================
 
     def check_ean(self, ean13: str) -> SecurityAlert:
-        """
-        Vérifie si un EAN correspond à un médicament.
-
-        Args:
-            ean13: Code EAN-13 à vérifier
-
-        Returns:
-            SecurityAlert
-        """
+        # Vérifie si un EAN correspond à un médicament.
         start_time = time.time()
 
         alert = SecurityAlert()
@@ -349,16 +310,7 @@ class SecurityModule:
         return alert
 
     def check_text(self, text: str) -> SecurityAlert:
-        """
-        Vérifie un texte pour les mots-clés sensibles.
-        Objectif: < 1ms de latence.
-
-        Args:
-            text: Texte à vérifier (transcription)
-
-        Returns:
-            SecurityAlert
-        """
+        # Vérifie un texte pour les mots-clés sensibles.
         start_time = time.time()
 
         alert = SecurityAlert()
@@ -418,7 +370,7 @@ class SecurityModule:
         return alert
 
     def _analyze_dangerous_context(self, text: str, matches: List[str]) -> Optional[Dict]:
-        """Analyse le contexte pour les usages dangereux."""
+        # Analyse le contexte pour les usages dangereux.
         # Ingestion
         if any(w in matches for w in ["boire", "avaler", "ingérer", "ingerer", "manger"]):
             return {
@@ -450,16 +402,7 @@ class SecurityModule:
         return None
 
     def check_full(self, text: str = "", ean13: str = "") -> SecurityAlert:
-        """
-        Vérification complète (texte + EAN).
-
-        Args:
-            text: Texte à vérifier
-            ean13: Code EAN à vérifier
-
-        Returns:
-            SecurityAlert (priorité à l'alerte la plus grave)
-        """
+        # Vérification complète (texte + EAN).
         alerts = []
 
         if ean13:
@@ -486,7 +429,7 @@ class SecurityModule:
         return triggered_alerts[0]
 
     def _update_stats(self, alert: SecurityAlert):
-        """Met à jour les statistiques."""
+        # Met à jour les statistiques.
         self._stats["total_checks"] += 1
 
         if alert.triggered:
@@ -499,23 +442,13 @@ class SecurityModule:
         self._stats["avg_check_time_ms"] = old_avg + (alert.check_time_ms - old_avg) / n
 
     def get_stats(self) -> Dict:
-        """Retourne les statistiques."""
+        # Retourne les statistiques.
         return self._stats.copy()
 
-    # =========================================================================
     # GÉNÉRATION AUDIO
-    # =========================================================================
 
     def generate_security_audio(self, openai_client=None) -> Dict[str, str]:
-        """
-        Génère les fichiers audio de sécurité avec OpenAI TTS.
-
-        Args:
-            openai_client: Client OpenAI (optionnel)
-
-        Returns:
-            Dict des fichiers générés
-        """
+        # Génère les fichiers audio de sécurité avec OpenAI TTS.
         generated = {}
 
         for key, response in SECURITY_RESPONSES.items():
@@ -557,7 +490,7 @@ class SecurityModule:
         return generated
 
     def _generate_silent_wav(self, path: Path, duration_ms: int = 1000, sample_rate: int = 24000):
-        """Génère un fichier WAV silencieux (placeholder)."""
+        # Génère un fichier WAV silencieux (placeholder).
         num_samples = int(sample_rate * duration_ms / 1000)
         samples = [0] * num_samples
 
@@ -570,7 +503,7 @@ class SecurityModule:
         print(f"[SECURITY] WAV placeholder généré: {path.name}")
 
     def get_audio_path(self, response_key: str) -> Optional[str]:
-        """Retourne le chemin de l'audio pour une réponse."""
+        # Retourne le chemin de l'audio pour une réponse.
         if response_key in SECURITY_RESPONSES:
             path = AUDIO_DIR / SECURITY_RESPONSES[response_key]["audio"]
             if path.exists():
@@ -578,16 +511,13 @@ class SecurityModule:
         return None
 
 
-# =============================================================================
 # ACTIONS ROBOT
-# =============================================================================
 
 class RobotSecurityActions:
-    """
-    Actions de sécurité sur le robot Pepper.
-    """
+    # Actions de sécurité sur le robot Pepper.
 
     def __init__(self, pepper_ip: str = None):
+        # Initialise l'objet.
         self._naoqi = None
         self._leds = None
         self._motion = None
@@ -597,7 +527,7 @@ class RobotSecurityActions:
             self._connect(pepper_ip)
 
     def _connect(self, pepper_ip: str):
-        """Connexion à Pepper."""
+        # Connexion à Pepper.
         try:
             import qi
             session = qi.Session()
@@ -615,12 +545,7 @@ class RobotSecurityActions:
             print(f"[ROBOT] Erreur connexion: {e}")
 
     def execute_action(self, action: str):
-        """
-        Exécute une action de sécurité.
-
-        Args:
-            action: Action(s) à exécuter, séparées par virgules
-        """
+        # Exécute une action de sécurité.
         actions = [a.strip() for a in action.split(",")]
 
         for act in actions:
@@ -636,7 +561,7 @@ class RobotSecurityActions:
                 self._gesture_shrug()
 
     def _set_leds_orange(self):
-        """Active les LEDs en orange (avertissement)."""
+        # Active les LEDs en orange (avertissement).
         if self._leds:
             try:
                 self._leds.fadeRGB("FaceLeds", 1.0, 0.5, 0.0, 0.5)  # Orange
@@ -645,7 +570,7 @@ class RobotSecurityActions:
         print("[ROBOT] LEDs → Orange")
 
     def _set_leds_red(self):
-        """Active les LEDs en rouge (alerte)."""
+        # Active les LEDs en rouge (alerte).
         if self._leds:
             try:
                 self._leds.fadeRGB("FaceLeds", 1.0, 0.0, 0.0, 0.5)  # Rouge
@@ -654,7 +579,7 @@ class RobotSecurityActions:
         print("[ROBOT] LEDs → Rouge")
 
     def _set_leds_normal(self):
-        """Remet les LEDs en blanc."""
+        # Remet les LEDs en blanc.
         if self._leds:
             try:
                 self._leds.fadeRGB("FaceLeds", 1.0, 1.0, 1.0, 0.5)  # Blanc
@@ -663,7 +588,7 @@ class RobotSecurityActions:
         print("[ROBOT] LEDs → Normal")
 
     def _gesture_stop(self):
-        """Geste de stop (main levée)."""
+        # Geste de stop (main levée).
         if self._motion:
             try:
                 # Lever le bras droit
@@ -676,7 +601,7 @@ class RobotSecurityActions:
         print("[ROBOT] Geste → Stop")
 
     def _gesture_shrug(self):
-        """Geste d'incompréhension (hausse épaules)."""
+        # Geste d'incompréhension (hausse épaules).
         if self._motion:
             try:
                 # Hausser les épaules
@@ -689,9 +614,7 @@ class RobotSecurityActions:
         print("[ROBOT] Geste → Haussement épaules")
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     print("=" * 70)

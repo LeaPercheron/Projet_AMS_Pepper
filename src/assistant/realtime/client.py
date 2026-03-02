@@ -1,31 +1,15 @@
 #!/usr/bin/env python3
-"""
-Phase 3 - Module OpenAI Realtime API
-====================================
-Communication bidirectionnelle WebSocket avec OpenAI Realtime API.
-Gère l'envoi/réception audio en streaming pour conversation vocale.
-
-Architecture:
-    Pepper Mic → Mac → [Ce module] → OpenAI Realtime → [Ce module] → Mac → Pepper Speaker
-
-API Reference: https://platform.openai.com/docs/guides/realtime
-
-Usage:
-    from openai_realtime import OpenAIRealtimeClient
-
-    client = OpenAIRealtimeClient(api_key="sk-...")
-    client.connect()
-    client.send_audio(audio_bytes)
-    # Les réponses arrivent via callbacks
-"""
+# Phase 3 - Module OpenAI Realtime API
 
 import asyncio
 import base64
 import json
 import time
 import struct
+import inspect
 import threading
 import os
+import ssl
 from typing import Optional, Callable, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
@@ -37,9 +21,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
 # CONFIGURATION
-# =============================================================================
 
 # OpenAI Realtime API
 OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime"
@@ -61,7 +43,7 @@ PEPPER_CHANNELS = 2              # Stéréo
 
 
 class ConnectionState(Enum):
-    """États de connexion WebSocket."""
+    # États de connexion WebSocket.
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -70,7 +52,7 @@ class ConnectionState(Enum):
 
 
 class ConversationState(Enum):
-    """États de la conversation."""
+    # États de la conversation.
     IDLE = "idle"
     LISTENING = "listening"
     PROCESSING = "processing"
@@ -79,7 +61,7 @@ class ConversationState(Enum):
 
 @dataclass
 class RealtimeConfig:
-    """Configuration du client Realtime."""
+    # Configuration du client Realtime.
     api_key: str = ""
     model: str = OPENAI_REALTIME_MODEL
 
@@ -106,11 +88,13 @@ class RealtimeConfig:
     auto_reconnect: bool = True
     max_reconnect_attempts: int = 5
     reconnect_delay_ms: int = 1000
+    disable_proxy: bool = True
+    proxy_url: str = ""
 
 
 @dataclass
 class LatencyMetrics:
-    """Métriques de latence."""
+    # Métriques de latence.
     speech_end_time: float = 0.0
     first_audio_time: float = 0.0
     time_to_first_byte_ms: float = 0.0
@@ -120,11 +104,11 @@ class LatencyMetrics:
     ttfb_history: List[float] = field(default_factory=list)
 
     def record_speech_end(self):
-        """Enregistre la fin de parole utilisateur."""
+        # Enregistre la fin de parole utilisateur.
         self.speech_end_time = time.time()
 
     def record_first_audio(self):
-        """Enregistre la réception du premier byte audio."""
+        # Enregistre la réception du premier byte audio.
         self.first_audio_time = time.time()
         if self.speech_end_time > 0:
             self.time_to_first_byte_ms = (self.first_audio_time - self.speech_end_time) * 1000
@@ -134,25 +118,20 @@ class LatencyMetrics:
                 self.ttfb_history.pop(0)
 
     def get_avg_ttfb(self) -> float:
-        """Retourne la latence moyenne TTFB."""
+        # Retourne la latence moyenne TTFB.
         if not self.ttfb_history:
             return 0.0
         return sum(self.ttfb_history) / len(self.ttfb_history)
 
 
-# =============================================================================
 # CONVERTISSEUR AUDIO
-# =============================================================================
 
 class AudioConverter:
-    """Conversion audio entre formats Pepper et OpenAI."""
+    # Conversion audio entre formats Pepper et OpenAI.
 
     @staticmethod
     def resample_48k_to_24k(audio_48k: bytes) -> bytes:
-        """
-        Resample 48kHz → 24kHz (division par 2).
-        Utilise une moyenne de 2 samples consécutifs.
-        """
+        # Resample 48kHz → 24kHz (division par 2).
         import numpy as np
 
         # Décoder PCM16
@@ -170,10 +149,7 @@ class AudioConverter:
 
     @staticmethod
     def resample_24k_to_48k(audio_24k: bytes) -> bytes:
-        """
-        Resample 24kHz → 48kHz (multiplication par 2).
-        Interpolation linéaire.
-        """
+        # Resample 24kHz → 48kHz (multiplication par 2).
         import numpy as np
 
         # Décoder PCM16
@@ -190,9 +166,7 @@ class AudioConverter:
 
     @staticmethod
     def mono_to_stereo(audio_mono: bytes) -> bytes:
-        """
-        Convertit mono → stéréo (duplication).
-        """
+        # Convertit mono → stéréo (duplication).
         import numpy as np
 
         # Décoder PCM16 mono
@@ -207,44 +181,38 @@ class AudioConverter:
 
     @staticmethod
     def convert_for_pepper(audio_24k_mono: bytes) -> bytes:
-        """
-        Convertit l'audio OpenAI pour Pepper.
-        24kHz mono → 48kHz stéréo
-        """
+        # Convertit l'audio OpenAI pour Pepper.
         audio_48k = AudioConverter.resample_24k_to_48k(audio_24k_mono)
         audio_stereo = AudioConverter.mono_to_stereo(audio_48k)
         return audio_stereo
 
     @staticmethod
     def convert_for_openai(audio_48k_mono: bytes) -> bytes:
-        """
-        Convertit l'audio traité (déjà mono) pour OpenAI.
-        48kHz mono → 24kHz mono (fait par Phase 2)
-        """
+        # Convertit l'audio traité (déjà mono) pour OpenAI.
         return AudioConverter.resample_48k_to_24k(audio_48k_mono)
 
 
-# =============================================================================
 # CLIENT OPENAI REALTIME
-# =============================================================================
 
 class OpenAIRealtimeClient:
-    """
-    Client WebSocket pour OpenAI Realtime API.
-
-    Gère:
-    - Connexion/reconnexion WebSocket
-    - Envoi audio en streaming (base64)
-    - Réception audio en streaming
-    - Callbacks pour événements
-    """
+    # Client WebSocket pour OpenAI Realtime API.
 
     def __init__(self, config: Optional[RealtimeConfig] = None):
+        # Initialise l'objet.
         self.config = config or RealtimeConfig()
 
         # Charger API key depuis env si non fournie
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+        # Surcharge optionnelle via variables d'environnement.
+        env_disable_proxy = os.getenv("OPENAI_DISABLE_PROXY", "").strip().lower()
+        if env_disable_proxy in {"1", "true", "yes", "on"}:
+            self.config.disable_proxy = True
+        elif env_disable_proxy in {"0", "false", "no", "off"}:
+            self.config.disable_proxy = False
+
+        if not self.config.proxy_url:
+            self.config.proxy_url = os.getenv("OPENAI_WS_PROXY", "").strip()
 
         # État
         self.connection_state = ConnectionState.DISCONNECTED
@@ -287,33 +255,28 @@ class OpenAIRealtimeClient:
         # Event loop
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
+        self._base_instructions: str = self.config.instructions or ""
+        self._product_context_note: str = ""
 
-    # -------------------------------------------------------------------------
     # Callbacks
-    # -------------------------------------------------------------------------
 
     def on(self, event: str, callback: Callable):
-        """Enregistre un callback pour un événement."""
+        # Enregistre un callback pour un événement.
         if event in self._callbacks:
             self._callbacks[event].append(callback)
 
     def _emit(self, event: str, *args, **kwargs):
-        """Émet un événement vers les callbacks."""
+        # Émet un événement vers les callbacks.
         for callback in self._callbacks.get(event, []):
             try:
                 callback(*args, **kwargs)
             except Exception as e:
                 logger.error(f"Erreur callback {event}: {e}")
 
-    # -------------------------------------------------------------------------
     # Connexion
-    # -------------------------------------------------------------------------
 
     def connect(self) -> bool:
-        """
-        Établit la connexion WebSocket (synchrone).
-        Lance un thread pour la boucle asyncio.
-        """
+        # Établit la connexion WebSocket (synchrone).
         if self.connection_state == ConnectionState.CONNECTED:
             logger.warning("Déjà connecté")
             return True
@@ -340,7 +303,7 @@ class OpenAIRealtimeClient:
         return self.connection_state == ConnectionState.CONNECTED
 
     def _run_async_loop(self):
-        """Thread pour la boucle asyncio."""
+        # Thread pour la boucle asyncio.
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 
@@ -351,7 +314,7 @@ class OpenAIRealtimeClient:
             self.connection_state = ConnectionState.ERROR
 
     async def _async_connect(self):
-        """Connexion WebSocket asynchrone."""
+        # Connexion WebSocket asynchrone.
         try:
             import websockets
         except ImportError:
@@ -369,13 +332,48 @@ class OpenAIRealtimeClient:
         try:
             logger.info(f"Connexion à {url}...")
 
-            self._ws = await websockets.connect(
-                url,
-                extra_headers=headers,
-                ping_interval=20,
-                ping_timeout=10,
-                close_timeout=5
-            )
+            connect_kwargs = {
+                "ping_interval": 20,
+                "ping_timeout": 10,
+                "close_timeout": 5,
+            }
+
+            # Force TLS moderne et stable (OpenAI requiert TLS >= 1.2).
+            tls_context = ssl.create_default_context()
+            tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            connect_kwargs["ssl"] = tls_context
+
+            # Compatibilité websockets: extra_headers (legacy) vs additional_headers (récent).
+            params = inspect.signature(websockets.connect).parameters
+            if "extra_headers" in params:
+                connect_kwargs["extra_headers"] = headers
+            else:
+                connect_kwargs["additional_headers"] = headers
+
+            # websockets >=15 active les proxies système par défaut (proxy=True).
+            # Sur certains réseaux (campus/entreprise), cela casse le handshake TLS.
+            if "proxy" in params:
+                if self.config.proxy_url:
+                    connect_kwargs["proxy"] = self.config.proxy_url
+                    logger.info("Connexion Realtime via proxy explicite")
+                elif self.config.disable_proxy:
+                    connect_kwargs["proxy"] = None
+                    logger.info("Connexion Realtime en direct (proxy desactive)")
+
+            try:
+                self._ws = await websockets.connect(url, **connect_kwargs)
+            except ssl.SSLError as tls_err:
+                msg = str(tls_err).lower()
+                # Certains réseaux cassent le handshake TLS 1.3: retry forcé en TLS 1.2.
+                if "handshake failure" in msg or "sslv3_alert_handshake_failure" in msg:
+                    logger.warning("Handshake TLS échoué, nouvelle tentative forcée en TLS1.2")
+                    tls12_context = ssl.create_default_context()
+                    tls12_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                    tls12_context.maximum_version = ssl.TLSVersion.TLSv1_2
+                    connect_kwargs["ssl"] = tls12_context
+                    self._ws = await websockets.connect(url, **connect_kwargs)
+                else:
+                    raise
 
             self._send_queue = asyncio.Queue()
 
@@ -405,7 +403,7 @@ class OpenAIRealtimeClient:
                 await self._handle_reconnect()
 
     async def _configure_session(self):
-        """Configure la session après connexion."""
+        # Configure la session après connexion.
         session_config = {
             "type": "session.update",
             "session": {
@@ -422,15 +420,22 @@ class OpenAIRealtimeClient:
             }
         }
 
-        # Ajouter instructions si présentes
-        if self.config.instructions:
-            session_config["session"]["instructions"] = self.config.instructions
+        instructions = self._build_effective_instructions()
+        if instructions:
+            session_config["session"]["instructions"] = instructions
 
         await self._ws.send(json.dumps(session_config))
         logger.info("Session configurée")
 
+    def _build_effective_instructions(self) -> str:
+        base = (self._base_instructions or "").strip()
+        note = (self._product_context_note or "").strip()
+        if base and note:
+            return f"{base}\n\n{note}"
+        return base or note
+
     async def _handle_reconnect(self):
-        """Gère la reconnexion automatique."""
+        # Gère la reconnexion automatique.
         if self._reconnect_attempts >= self.config.max_reconnect_attempts:
             logger.error("Max reconnexions atteint")
             self.connection_state = ConnectionState.ERROR
@@ -446,7 +451,7 @@ class OpenAIRealtimeClient:
         await self._async_connect()
 
     def disconnect(self):
-        """Ferme la connexion."""
+        # Ferme la connexion.
         self.connection_state = ConnectionState.DISCONNECTED
 
         if self._receive_task:
@@ -460,18 +465,10 @@ class OpenAIRealtimeClient:
         self._emit('on_disconnected')
         logger.info("Déconnecté")
 
-    # -------------------------------------------------------------------------
     # Envoi Audio
-    # -------------------------------------------------------------------------
 
     def send_audio(self, audio_bytes: bytes):
-        """
-        Envoie de l'audio vers OpenAI (thread-safe).
-        L'audio doit être en PCM16 24kHz mono.
-
-        Args:
-            audio_bytes: Audio PCM16 24kHz mono
-        """
+        # Envoie de l'audio vers OpenAI (thread-safe).
         if self.connection_state != ConnectionState.CONNECTED:
             return
 
@@ -502,10 +499,7 @@ class OpenAIRealtimeClient:
             self._audio_chunks_sent += 1
 
     def commit_audio(self):
-        """
-        Signale la fin de l'audio d'entrée (commit buffer).
-        Utile si turn_detection est désactivé.
-        """
+        # Signale la fin de l'audio d'entrée (commit buffer).
         if self.connection_state != ConnectionState.CONNECTED:
             return
 
@@ -533,7 +527,7 @@ class OpenAIRealtimeClient:
         self.latency.record_speech_end()
 
     def cancel_response(self):
-        """Annule la réponse en cours (interruption)."""
+        # Annule la réponse en cours (interruption).
         if self.connection_state != ConnectionState.CONNECTED:
             return
 
@@ -543,8 +537,37 @@ class OpenAIRealtimeClient:
             self._loop
         )
 
+    def set_product_context(self, product_name: str = "", ean: str = ""):
+        # Met à jour le contexte produit injecté dans les instructions de session.
+        name = (product_name or "").strip()
+        code = (ean or "").strip()
+        if name or code:
+            parts = []
+            if name:
+                parts.append(f"Produit actuellement identifié: {name}.")
+            if code:
+                parts.append(f"EAN actuel: {code}.")
+            parts.append("Quand l'utilisateur dit 'ce produit', il s'agit de ce produit.")
+            self._product_context_note = "CONTEXTE PRODUIT:\n" + "\n".join(parts)
+        else:
+            self._product_context_note = ""
+
+        if self.connection_state != ConnectionState.CONNECTED or not self._send_queue or not self._loop:
+            return
+
+        message = {
+            "type": "session.update",
+            "session": {
+                "instructions": self._build_effective_instructions()
+            }
+        }
+        asyncio.run_coroutine_threadsafe(
+            self._send_queue.put(message),
+            self._loop
+        )
+
     async def _send_loop(self):
-        """Boucle d'envoi des messages."""
+        # Boucle d'envoi des messages.
         try:
             while self.connection_state == ConnectionState.CONNECTED:
                 message = await self._send_queue.get()
@@ -557,35 +580,27 @@ class OpenAIRealtimeClient:
         except Exception as e:
             logger.error(f"Erreur envoi: {e}")
 
-    # -------------------------------------------------------------------------
     # Réception Audio
-    # -------------------------------------------------------------------------
 
     def get_output_audio(self) -> Optional[bytes]:
-        """
-        Récupère le prochain chunk audio de sortie.
-        Retourne None si pas d'audio disponible.
-
-        Returns:
-            Audio PCM16 48kHz stéréo (format Pepper) ou None
-        """
+        # Récupère le prochain chunk audio de sortie.
         if self._output_buffer:
             return self._output_buffer.popleft()
         return None
 
     def get_all_output_audio(self) -> bytes:
-        """Récupère tout l'audio de sortie disponible."""
+        # Récupère tout l'audio de sortie disponible.
         result = bytearray()
         while self._output_buffer:
             result.extend(self._output_buffer.popleft())
         return bytes(result)
 
     def has_output_audio(self) -> bool:
-        """Vérifie s'il y a de l'audio en attente."""
+        # Vérifie s'il y a de l'audio en attente.
         return len(self._output_buffer) > 0
 
     async def _receive_loop(self):
-        """Boucle de réception des messages."""
+        # Boucle de réception des messages.
         try:
             async for message in self._ws:
                 await self._handle_message(message)
@@ -600,7 +615,7 @@ class OpenAIRealtimeClient:
                 await self._handle_reconnect()
 
     async def _handle_message(self, raw_message: str):
-        """Traite un message reçu."""
+        # Traite un message reçu.
         try:
             message = json.loads(raw_message)
             msg_type = message.get("type", "")
@@ -686,12 +701,10 @@ class OpenAIRealtimeClient:
         except Exception as e:
             logger.error(f"Erreur traitement message: {e}")
 
-    # -------------------------------------------------------------------------
     # Utilitaires
-    # -------------------------------------------------------------------------
 
     def get_stats(self) -> Dict[str, Any]:
-        """Retourne les statistiques."""
+        # Retourne les statistiques.
         return {
             'connection_state': self.connection_state.value,
             'conversation_state': self.conversation_state.value,
@@ -705,13 +718,11 @@ class OpenAIRealtimeClient:
         }
 
     def is_connected(self) -> bool:
-        """Vérifie si connecté."""
+        # Vérifie si connecté.
         return self.connection_state == ConnectionState.CONNECTED
 
 
-# =============================================================================
 # PROMPT SYSTÈME PARAPHARMACIE
-# =============================================================================
 
 PARAPHARMACIE_INSTRUCTIONS = """Tu es un assistant vocal pour une parapharmacie, spécialisé dans les produits capillaires.
 
@@ -732,15 +743,7 @@ Tu NE DOIS PAS parler de:
 
 
 def create_parapharmacie_client(api_key: Optional[str] = None) -> OpenAIRealtimeClient:
-    """
-    Crée un client configuré pour le contexte parapharmacie.
-
-    Args:
-        api_key: Clé API OpenAI (ou variable OPENAI_API_KEY)
-
-    Returns:
-        Client configuré
-    """
+    # Crée un client configuré pour le contexte parapharmacie.
     config = RealtimeConfig(
         api_key=api_key or os.getenv("OPENAI_API_KEY", ""),
         voice="nova",  # Voix féminine claire
@@ -753,9 +756,7 @@ def create_parapharmacie_client(api_key: Optional[str] = None) -> OpenAIRealtime
     return OpenAIRealtimeClient(config)
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     import sys
@@ -779,15 +780,19 @@ if __name__ == "__main__":
 
     # Callbacks
     def on_connected():
+        # Gere connected.
         print("[EVENT] Connecté!")
 
     def on_audio_received(audio):
+        # Gere audio received.
         print(f"[EVENT] Audio reçu: {len(audio)} bytes")
 
     def on_transcript(text):
+        # Gere transcript.
         print(f"[EVENT] Transcription: {text}")
 
     def on_error(error):
+        # Gere error.
         print(f"[EVENT] Erreur: {error}")
 
     client.on('on_connected', on_connected)

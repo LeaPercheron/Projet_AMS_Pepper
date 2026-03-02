@@ -1,42 +1,31 @@
-"""
-Configuration Centralisee
-=========================
-Tous les parametres ajustables du systeme en un seul fichier.
-
-Usage:
-    from assistant.config import Config, get_config, RunMode
-
-    config = get_config()
-    print(config.mode)
-    print(config.openai.api_key)
-"""
+# Configuration Centralisee
 
 import os
 import json
 import yaml
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from pathlib import Path
 from typing import Optional, Dict, Any
 from enum import Enum
 
 
-# ==================== MODES ====================
 
 class RunMode(Enum):
-    """Modes d'execution."""
+    # Modes d'execution.
     DEVELOPMENT = "development"
     PRODUCTION = "production"
     SIMULATION = "simulation"
     TEST = "test"
 
 
-# ==================== CONFIGURATIONS MODULES ====================
 
 @dataclass
 class OpenAIConfig:
-    """Configuration OpenAI Realtime API."""
+    # Configuration OpenAI Realtime API.
     api_key: str = ""
     model: str = "gpt-4o-realtime-preview-2024-12-17"
+    http_fallback_model: str = "gpt-4o-mini"
+    http_transcription_model: str = "whisper-1"
     voice: str = "shimmer"
     temperature: float = 0.8
     max_response_tokens: int = 4096
@@ -51,13 +40,14 @@ class OpenAIConfig:
     output_sample_rate: int = 24000
 
     def __post_init__(self):
+        # Gere init.
         if not self.api_key:
             self.api_key = os.getenv("OPENAI_API_KEY", "")
 
 
 @dataclass
 class AudioConfig:
-    """Configuration audio."""
+    # Configuration audio.
     # Microphone
     input_device_index: Optional[int] = None
     input_sample_rate: int = 24000
@@ -83,7 +73,7 @@ class AudioConfig:
 
 @dataclass
 class VisionConfig:
-    """Configuration module vision."""
+    # Configuration module vision.
     # Camera
     camera_index: int = 0
     camera_width: int = 640
@@ -109,7 +99,7 @@ class VisionConfig:
 
 @dataclass
 class DatabaseConfig:
-    """Configuration base de donnees."""
+    # Configuration base de donnees.
     db_path: str = "data/products.db"
     blacklist_path: str = "data/blacklist.json"
 
@@ -121,7 +111,7 @@ class DatabaseConfig:
 
 @dataclass
 class SecurityConfig:
-    """Configuration module securite."""
+    # Configuration module securite.
     filter_latency_target_ms: float = 1.0
     audio_directory: str = "data/security_audio"
     block_on_high_severity: bool = True
@@ -131,7 +121,7 @@ class SecurityConfig:
 
 @dataclass
 class OrchestratorConfig:
-    """Configuration orchestrateur."""
+    # Configuration orchestrateur.
     # Timeouts (secondes)
     idle_timeout: float = 60.0
     greeting_timeout: float = 10.0
@@ -152,7 +142,7 @@ class OrchestratorConfig:
 
 @dataclass
 class TabletConfig:
-    """Configuration interface tablette."""
+    # Configuration interface tablette.
     ws_host: str = "0.0.0.0"
     ws_port: int = 8765
     ping_interval: float = 30.0
@@ -162,9 +152,13 @@ class TabletConfig:
 
 @dataclass
 class PepperConfig:
-    """Configuration robot Pepper."""
+    # Configuration robot Pepper.
     ip: str = ""
     port: int = 9559
+    ssh_user: str = "nao"
+    ssh_port: int = 22
+    ssh_python: str = "python"
+    force_ssh_bridge: bool = False
 
     # Comportement
     autonomous_life: bool = False
@@ -178,7 +172,7 @@ class PepperConfig:
 
 @dataclass
 class LoggingConfig:
-    """Configuration logging."""
+    # Configuration logging.
     log_directory: str = "logs"
     log_file_prefix: str = "pepper_assistant"
     format_jsonl: bool = True
@@ -189,11 +183,10 @@ class LoggingConfig:
     backup_count: int = 5
 
 
-# ==================== CONFIGURATION PRINCIPALE ====================
 
 @dataclass
 class Config:
-    """Configuration principale du systeme."""
+    # Configuration principale du systeme.
 
     mode: RunMode = RunMode.DEVELOPMENT
     PRODUCTION_MODE: bool = False
@@ -213,6 +206,7 @@ class Config:
     project_root: str = ""
 
     def __post_init__(self):
+        # Gere init.
         self.PRODUCTION_MODE = (self.mode == RunMode.PRODUCTION)
 
         if not self.project_root:
@@ -222,7 +216,7 @@ class Config:
         self._resolve_paths()
 
     def _resolve_paths(self):
-        """Resout les chemins relatifs en chemins absolus."""
+        # Resout les chemins relatifs en chemins absolus.
         root = Path(self.project_root)
 
         # Database
@@ -241,7 +235,7 @@ class Config:
             self.security.audio_directory = str(root / self.security.audio_directory)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convertit la configuration en dictionnaire."""
+        # Convertit la configuration en dictionnaire.
         result = {}
         for key, value in asdict(self).items():
             if isinstance(value, Enum):
@@ -251,13 +245,17 @@ class Config:
         return result
 
     def save(self, path: str):
-        """Sauvegarde la configuration dans un fichier JSON."""
+        # Sauvegarde la configuration dans un fichier JSON.
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
     @classmethod
     def load(cls, path: str) -> 'Config':
-        """Charge la configuration depuis un fichier JSON ou YAML."""
+        # Charge la configuration depuis un fichier JSON ou YAML.
+        def _only_known(dataclass_type, payload: Dict[str, Any]) -> Dict[str, Any]:
+            allowed = {f.name for f in fields(dataclass_type)}
+            return {k: v for k, v in payload.items() if k in allowed and v is not None}
+
         with open(path, 'r', encoding='utf-8') as f:
             if path.endswith('.yaml') or path.endswith('.yml'):
                 data = yaml.safe_load(f)
@@ -272,23 +270,96 @@ class Config:
 
         # Charger les sous-configurations
         if 'openai' in data:
-            config.openai = OpenAIConfig(**data['openai'])
+            openai_data = dict(data['openai'] or {})
+            vad_data = openai_data.get('vad', {})
+            if isinstance(vad_data, dict):
+                openai_data.setdefault('vad_threshold', vad_data.get('threshold'))
+                openai_data.setdefault('vad_prefix_padding_ms', vad_data.get('prefix_padding_ms'))
+                openai_data.setdefault('vad_silence_duration_ms', vad_data.get('silence_duration_ms'))
+            config.openai = OpenAIConfig(**_only_known(OpenAIConfig, openai_data))
+
         if 'audio' in data:
-            config.audio = AudioConfig(**data['audio'])
+            audio_data = dict(data['audio'] or {})
+            capture_data = audio_data.get('capture', {})
+            processing_data = audio_data.get('processing', {})
+            if isinstance(capture_data, dict):
+                audio_data.setdefault('input_sample_rate', capture_data.get('sample_rate'))
+                audio_data.setdefault('input_channels', capture_data.get('channels'))
+                audio_data.setdefault('input_chunk_size', capture_data.get('buffer_size'))
+            if isinstance(processing_data, dict):
+                audio_data.setdefault('processing_preset', processing_data.get('preset'))
+            config.audio = AudioConfig(**_only_known(AudioConfig, audio_data))
+
         if 'vision' in data:
-            config.vision = VisionConfig(**data['vision'])
+            vision_data = dict(data['vision'] or {})
+            confidence_data = vision_data.get('confidence', {})
+            capture_data = vision_data.get('capture', {})
+            if isinstance(confidence_data, dict):
+                vision_data.setdefault('confidence_high', confidence_data.get('high'))
+                vision_data.setdefault('confidence_medium', confidence_data.get('medium'))
+                vision_data.setdefault('confidence_low', confidence_data.get('low'))
+            if isinstance(capture_data, dict):
+                vision_data.setdefault('num_frames', capture_data.get('num_frames'))
+                vision_data.setdefault('capture_interval_ms', capture_data.get('interval_ms'))
+                vision_data.setdefault('camera_width', capture_data.get('width'))
+                vision_data.setdefault('camera_height', capture_data.get('height'))
+            if 'model' in vision_data:
+                vision_data.setdefault('vlm_model', vision_data.get('model'))
+            config.vision = VisionConfig(**_only_known(VisionConfig, vision_data))
+
         if 'database' in data:
-            config.database = DatabaseConfig(**data['database'])
+            db_data = dict(data['database'] or {})
+            if 'path' in db_data:
+                db_data.setdefault('db_path', db_data.get('path'))
+            config.database = DatabaseConfig(**_only_known(DatabaseConfig, db_data))
+
         if 'security' in data:
-            config.security = SecurityConfig(**data['security'])
+            sec_data = dict(data['security'] or {})
+            if 'audio_dir' in sec_data:
+                sec_data.setdefault('audio_directory', sec_data.get('audio_dir'))
+            config.security = SecurityConfig(**_only_known(SecurityConfig, sec_data))
+
         if 'orchestrator' in data:
-            config.orchestrator = OrchestratorConfig(**data['orchestrator'])
+            orch_data = dict(data['orchestrator'] or {})
+            timeouts_data = orch_data.get('timeouts', {})
+            if isinstance(timeouts_data, dict):
+                for key in (
+                    "idle_timeout",
+                    "greeting_timeout",
+                    "intent_timeout",
+                    "scan_timeout",
+                    "confirm_timeout",
+                    "conversation_timeout",
+                ):
+                    yaml_key = key.replace("_timeout", "")
+                    orch_data.setdefault(key, timeouts_data.get(yaml_key))
+            config.orchestrator = OrchestratorConfig(**_only_known(OrchestratorConfig, orch_data))
+
         if 'tablet' in data:
-            config.tablet = TabletConfig(**data['tablet'])
+            tablet_data = dict(data['tablet'] or {})
+            server_data = tablet_data.get('server', {})
+            if isinstance(server_data, dict):
+                tablet_data.setdefault('ws_host', server_data.get('host'))
+                tablet_data.setdefault('ws_port', server_data.get('port'))
+                tablet_data.setdefault('ping_interval', server_data.get('ping_interval'))
+                tablet_data.setdefault('ping_timeout', server_data.get('ping_timeout'))
+            config.tablet = TabletConfig(**_only_known(TabletConfig, tablet_data))
+
         if 'pepper' in data:
-            config.pepper = PepperConfig(**data['pepper'])
+            config.pepper = PepperConfig(**_only_known(PepperConfig, data['pepper'] or {}))
+
         if 'logging' in data:
-            config.logging = LoggingConfig(**data['logging'])
+            logging_data = dict(data['logging'] or {})
+            level = logging_data.get('level')
+            if level:
+                logging_data.setdefault('console_level', level)
+                logging_data.setdefault('file_level', level)
+            if 'file' in logging_data:
+                file_path = Path(str(logging_data['file']))
+                if str(file_path.parent) not in ("", "."):
+                    logging_data.setdefault('log_directory', str(file_path.parent))
+                logging_data.setdefault('log_file_prefix', file_path.stem)
+            config.logging = LoggingConfig(**_only_known(LoggingConfig, logging_data))
 
         if 'project_root' in data:
             config.project_root = data['project_root']
@@ -297,10 +368,9 @@ class Config:
         return config
 
 
-# ==================== CONFIGURATIONS PRE-DEFINIES ====================
 
 def get_development_config() -> Config:
-    """Configuration pour le developpement."""
+    # Configuration pour le developpement.
     return Config(
         mode=RunMode.DEVELOPMENT,
         openai=OpenAIConfig(temperature=0.8),
@@ -310,7 +380,7 @@ def get_development_config() -> Config:
 
 
 def get_production_config() -> Config:
-    """Configuration pour la production."""
+    # Configuration pour la production.
     return Config(
         mode=RunMode.PRODUCTION,
         openai=OpenAIConfig(temperature=0.6),
@@ -321,7 +391,7 @@ def get_production_config() -> Config:
 
 
 def get_simulation_config() -> Config:
-    """Configuration pour la simulation (sans materiel)."""
+    # Configuration pour la simulation (sans materiel).
     return Config(
         mode=RunMode.SIMULATION,
         vision=VisionConfig(camera_index=-1),
@@ -332,7 +402,7 @@ def get_simulation_config() -> Config:
 
 
 def get_test_config() -> Config:
-    """Configuration pour les tests."""
+    # Configuration pour les tests.
     return Config(
         mode=RunMode.TEST,
         orchestrator=OrchestratorConfig(
@@ -347,21 +417,12 @@ def get_test_config() -> Config:
     )
 
 
-# ==================== SINGLETON ====================
 
 _config_instance: Optional[Config] = None
 
 
 def get_config(mode: Optional[RunMode] = None) -> Config:
-    """
-    Recupere l'instance de configuration (singleton).
-
-    Args:
-        mode: Mode d'execution (si None, utilise la variable d'environnement ou DEVELOPMENT)
-
-    Returns:
-        Instance de configuration
-    """
+    # Recupere l'instance de configuration (singleton).
     global _config_instance
 
     if _config_instance is None:
@@ -382,6 +443,6 @@ def get_config(mode: Optional[RunMode] = None) -> Config:
 
 
 def reset_config():
-    """Reinitialise la configuration (pour les tests)."""
+    # Reinitialise la configuration (pour les tests).
     global _config_instance
     _config_instance = None

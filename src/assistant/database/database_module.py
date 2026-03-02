@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 6 - Module Base de Données Produits
-=========================================
-Gestion SQLite des produits capillaires parapharmacie.
-Recherche par EAN, nom, catégorie avec support fuzzy matching.
-
-Usage:
-    from database_module import ProductDatabase
-
-    db = ProductDatabase("products.db")
-    product = db.get_by_ean("3282770149272")
-    results = db.search_fuzzy("klorane camomille")
-"""
+# Phase 6 - Module Base de Données Produits
 
 import os
 import re
@@ -25,13 +13,11 @@ from contextlib import contextmanager
 from difflib import SequenceMatcher
 
 
-# =============================================================================
 # STRUCTURES DE DONNÉES
-# =============================================================================
 
 @dataclass
 class Product:
-    """Produit capillaire."""
+    # Produit capillaire.
     id: str
     ean13: str
     name: str
@@ -53,12 +39,12 @@ class Product:
     keywords: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convertit en dictionnaire."""
+        # Convertit en dictionnaire.
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Product':
-        """Crée depuis un dictionnaire."""
+        # Crée depuis un dictionnaire.
         return cls(
             id=data.get('id', ''),
             ean13=data.get('ean13', ''),
@@ -84,20 +70,16 @@ class Product:
 
 @dataclass
 class SearchResult:
-    """Résultat de recherche."""
+    # Résultat de recherche.
     product: Product
     score: float  # Score de pertinence (0-1)
     match_type: str  # "exact", "fuzzy", "keyword"
 
 
-# =============================================================================
 # BASE DE DONNÉES
-# =============================================================================
 
 class ProductDatabase:
-    """
-    Base de données SQLite pour les produits capillaires.
-    """
+    # Base de données SQLite pour les produits capillaires.
 
     # Schéma de la base de données
     SCHEMA = """
@@ -160,24 +142,19 @@ class ProductDatabase:
     """
 
     def __init__(self, db_path: str = "products.db"):
-        """
-        Initialise la base de données.
-
-        Args:
-            db_path: Chemin vers le fichier SQLite
-        """
+        # Initialise la base de données.
         self.db_path = db_path
         self._init_database()
 
     def _init_database(self):
-        """Initialise le schéma de la base."""
+        # Initialise le schéma de la base.
         with self._get_connection() as conn:
             conn.executescript(self.SCHEMA)
             conn.commit()
 
     @contextmanager
     def _get_connection(self):
-        """Context manager pour connexion SQLite."""
+        # Context manager pour connexion SQLite.
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
@@ -185,20 +162,10 @@ class ProductDatabase:
         finally:
             conn.close()
 
-    # =========================================================================
     # CRUD PRODUITS
-    # =========================================================================
 
     def insert_product(self, product: Product) -> bool:
-        """
-        Insère un produit dans la base.
-
-        Args:
-            product: Produit à insérer
-
-        Returns:
-            True si succès
-        """
+        # Insère un produit dans la base.
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -249,7 +216,7 @@ class ProductDatabase:
             return False
 
     def _build_search_text(self, product: Product) -> str:
-        """Construit le texte de recherche pour un produit."""
+        # Construit le texte de recherche pour un produit.
         parts = [
             product.name.lower(),
             product.brand.lower(),
@@ -261,15 +228,7 @@ class ProductDatabase:
         return ' '.join(parts)
 
     def get_by_id(self, product_id: str) -> Optional[Product]:
-        """
-        Récupère un produit par son ID.
-
-        Args:
-            product_id: ID du produit
-
-        Returns:
-            Product ou None
-        """
+        # Récupère un produit par son ID.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
@@ -280,16 +239,7 @@ class ProductDatabase:
             return None
 
     def get_by_ean(self, ean13: str) -> Optional[Product]:
-        """
-        Récupère un produit par son code EAN-13.
-        Recherche optimisée avec index.
-
-        Args:
-            ean13: Code EAN-13
-
-        Returns:
-            Product ou None
-        """
+        # Récupère un produit par son code EAN-13.
         start_time = time.time()
 
         with self._get_connection() as conn:
@@ -307,7 +257,7 @@ class ProductDatabase:
             return None
 
     def get_all_products(self) -> List[Product]:
-        """Récupère tous les produits."""
+        # Récupère tous les produits.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM products ORDER BY brand, name")
@@ -315,7 +265,7 @@ class ProductDatabase:
             return [self._row_to_product(row) for row in rows]
 
     def _row_to_product(self, row: sqlite3.Row) -> Product:
-        """Convertit une ligne SQLite en Product."""
+        # Convertit une ligne SQLite en Product.
         return Product(
             id=row['id'],
             ean13=row['ean13'],
@@ -339,7 +289,7 @@ class ProductDatabase:
         )
 
     def delete_product(self, product_id: str) -> bool:
-        """Supprime un produit."""
+        # Supprime un produit.
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -351,17 +301,16 @@ class ProductDatabase:
             return False
 
     def count_products(self) -> int:
-        """Compte le nombre de produits."""
+        # Compte le nombre de produits.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM products")
             return cursor.fetchone()[0]
 
-    # =========================================================================
     # RECHERCHE
-    # =========================================================================
 
     def search_fuzzy(
+        # Gere fuzzy.
         self,
         query: str,
         limit: int = 10,
@@ -415,6 +364,7 @@ class ProductDatabase:
         return results[:limit]
 
     def _calculate_fuzzy_score(
+        # Gere fuzzy score.
         self,
         query: str,
         product: Product,
@@ -452,15 +402,7 @@ class ProductDatabase:
         return min(1.0, max(scores) if scores else 0.0)
 
     def search_by_category(self, category: str) -> List[Product]:
-        """
-        Filtre par catégorie.
-
-        Args:
-            category: Catégorie (ex: "Shampooing")
-
-        Returns:
-            Liste de produits
-        """
+        # Filtre par catégorie.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -470,15 +412,7 @@ class ProductDatabase:
             return [self._row_to_product(row) for row in cursor.fetchall()]
 
     def search_by_hair_type(self, hair_type: str) -> List[Product]:
-        """
-        Filtre par type de cheveux.
-
-        Args:
-            hair_type: Type de cheveux (ex: "Cheveux secs")
-
-        Returns:
-            Liste de produits
-        """
+        # Filtre par type de cheveux.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # Recherche dans le JSON array
@@ -489,7 +423,7 @@ class ProductDatabase:
             return [self._row_to_product(row) for row in cursor.fetchall()]
 
     def search_by_brand(self, brand: str) -> List[Product]:
-        """Filtre par marque."""
+        # Filtre par marque.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -499,33 +433,23 @@ class ProductDatabase:
             return [self._row_to_product(row) for row in cursor.fetchall()]
 
     def get_categories(self) -> List[str]:
-        """Retourne toutes les catégories distinctes."""
+        # Retourne toutes les catégories distinctes.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT DISTINCT category FROM products ORDER BY category")
             return [row[0] for row in cursor.fetchall()]
 
     def get_brands(self) -> List[str]:
-        """Retourne toutes les marques distinctes."""
+        # Retourne toutes les marques distinctes.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT DISTINCT brand FROM products ORDER BY brand")
             return [row[0] for row in cursor.fetchall()]
 
-    # =========================================================================
     # BLACKLIST
-    # =========================================================================
 
     def is_blacklisted(self, ean13: str) -> Tuple[bool, str]:
-        """
-        Vérifie si un EAN est blacklisté.
-
-        Args:
-            ean13: Code EAN-13
-
-        Returns:
-            (is_blacklisted, reason)
-        """
+        # Vérifie si un EAN est blacklisté.
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
@@ -547,7 +471,7 @@ class ProductDatabase:
             return False, ""
 
     def add_to_blacklist(self, ean13: str, description: str = "", reason: str = "medicament") -> bool:
-        """Ajoute un EAN à la liste noire."""
+        # Ajoute un EAN à la liste noire.
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -561,7 +485,7 @@ class ProductDatabase:
             return False
 
     def add_blacklist_prefix(self, prefix: str, description: str = "") -> bool:
-        """Ajoute un préfixe à la liste noire."""
+        # Ajoute un préfixe à la liste noire.
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -575,15 +499,7 @@ class ProductDatabase:
             return False
 
     def load_blacklist_from_json(self, json_path: str) -> int:
-        """
-        Charge la blacklist depuis un fichier JSON.
-
-        Args:
-            json_path: Chemin vers le fichier JSON
-
-        Returns:
-            Nombre d'entrées chargées
-        """
+        # Charge la blacklist depuis un fichier JSON.
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -614,7 +530,7 @@ class ProductDatabase:
             return 0
 
     def count_blacklist(self) -> int:
-        """Compte les entrées dans la blacklist."""
+        # Compte les entrées dans la blacklist.
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM blacklist_ean")
@@ -623,20 +539,10 @@ class ProductDatabase:
             prefix_count = cursor.fetchone()[0]
             return ean_count + prefix_count
 
-    # =========================================================================
     # IMPORT/EXPORT
-    # =========================================================================
 
     def import_from_json(self, json_path: str) -> int:
-        """
-        Importe des produits depuis un fichier JSON.
-
-        Args:
-            json_path: Chemin vers le fichier JSON
-
-        Returns:
-            Nombre de produits importés
-        """
+        # Importe des produits depuis un fichier JSON.
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -656,15 +562,7 @@ class ProductDatabase:
             return 0
 
     def export_to_json(self, json_path: str) -> bool:
-        """
-        Exporte tous les produits vers un fichier JSON.
-
-        Args:
-            json_path: Chemin de sortie
-
-        Returns:
-            True si succès
-        """
+        # Exporte tous les produits vers un fichier JSON.
         try:
             products = self.get_all_products()
             data = {
@@ -685,12 +583,10 @@ class ProductDatabase:
             print(f"[DB] Erreur export JSON: {e}")
             return False
 
-    # =========================================================================
     # STATISTIQUES
-    # =========================================================================
 
     def get_stats(self) -> Dict[str, Any]:
-        """Retourne les statistiques de la base."""
+        # Retourne les statistiques de la base.
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
@@ -729,9 +625,7 @@ class ProductDatabase:
             }
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     import tempfile

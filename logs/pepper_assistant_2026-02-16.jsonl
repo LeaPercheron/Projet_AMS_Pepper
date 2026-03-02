@@ -1,0 +1,76 @@
+{"timestamp": "2026-02-16T09:35:49.344810", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-02-16T09:35:49.345325", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-02-16T09:35:49.345616", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-02-16T09:35:49.554704", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-02-16T09:35:49.556208", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-02-16T09:35:49.568060", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-02-16T09:35:49.568649", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-02-16T09:35:49.578021", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-02-16T09:35:49.578459", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-02-16T09:35:49.578862", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-02-16T09:35:49.579263", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-02-16T09:35:49.600003", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-02-16T09:35:49.600526", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-02-16T09:35:49.602464", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-02-16T09:35:49.602650", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-02-16T09:35:49.603082", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-02-16T09:35:49.603438", "level": "INFO", "event": "session_start", "data": {"session_id": "20260216_093549"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.603871", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.604295", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.604805", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.605285", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260216_093549"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.605708", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.606142", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 2 taches paralleles"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.606338", "level": "INFO", "event": "tablet_connected", "data": {"status": "starting"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:49.636016", "level": "ERROR", "event": "error", "data": {"message": "Erreur serveur tablette", "exception": "[Errno 1] error while attempting to bind on address ('0.0.0.0', 8765): [errno 1] operation not permitted", "traceback": "Traceback (most recent call last):\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/main.py\", line 341, in _run_tablet_server\n    await self.tablet_server.start()\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/tablet/server.py\", line 140, in start\n    async with websockets.serve(\n               ^^^^^^^^^^^^^^^^^\n  File \"/Users/leapercheron/Library/Python/3.12/lib/python/site-packages/websockets/asyncio/server.py\", line 813, in __aenter__\n    return await self\n           ^^^^^^^^^^\n  File \"/Users/leapercheron/Library/Python/3.12/lib/python/site-packages/websockets/asyncio/server.py\", line 831, in __await_impl__\n    server = await self.create_server\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py\", line 1571, in create_server\n    raise OSError(err.errno, msg) from None\nPermissionError: [Errno 1] error while attempting to bind on address ('0.0.0.0', 8765): [errno 1] operation not permitted\n"}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:55.303885", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:55.378245", "level": "INFO", "event": "session_end", "data": {"session_id": "20260216_093549", "duration_sec": 5.8, "stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260216_093549"}
+{"timestamp": "2026-02-16T09:35:55.379349", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-02-16T09:35:55.380908", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-02-16T09:36:46.650490", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-02-16T09:36:46.650982", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-02-16T09:36:46.651253", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-02-16T09:36:46.859840", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-02-16T09:36:46.860419", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-02-16T09:36:46.869024", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-02-16T09:36:46.869504", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-02-16T09:36:46.877447", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-02-16T09:36:46.877850", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-02-16T09:36:46.878190", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-02-16T09:36:46.878515", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-02-16T09:36:46.897752", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-02-16T09:36:46.898266", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-02-16T09:36:46.900051", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-02-16T09:36:46.900239", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-02-16T09:36:46.900665", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}
+{"timestamp": "2026-02-16T09:36:46.901005", "level": "INFO", "event": "session_start", "data": {"session_id": "20260216_093646"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.901413", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.901840", "level": "INFO", "event": "info", "data": {"message": "ASSISTANT PARAPHARMACIE PEPPER"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.902255", "level": "INFO", "event": "info", "data": {"message": "   Mode: simulation"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.902690", "level": "INFO", "event": "info", "data": {"message": "   Session: 20260216_093646"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.903096", "level": "INFO", "event": "info", "data": {"message": "=================================================="}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.903547", "level": "INFO", "event": "info", "data": {"message": "Demarrage de 2 taches paralleles"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.903728", "level": "INFO", "event": "tablet_connected", "data": {"status": "starting"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:46.934428", "level": "ERROR", "event": "error", "data": {"message": "Erreur serveur tablette", "exception": "[Errno 1] error while attempting to bind on address ('0.0.0.0', 8765): [errno 1] operation not permitted", "traceback": "Traceback (most recent call last):\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/src/assistant/main.py\", line 341, in _run_tablet_server\n    await self.tablet_server.start()\n  File \"/Users/leapercheron/Master/Semestre_2/Projet_AMS_2/Projet/depot/Projet_AMS_Pepper/tablet/server.py\", line 140, in start\n    async with websockets.serve(\n               ^^^^^^^^^^^^^^^^^\n  File \"/Users/leapercheron/Library/Python/3.12/lib/python/site-packages/websockets/asyncio/server.py\", line 813, in __aenter__\n    return await self\n           ^^^^^^^^^^\n  File \"/Users/leapercheron/Library/Python/3.12/lib/python/site-packages/websockets/asyncio/server.py\", line 831, in __await_impl__\n    server = await self.create_server\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py\", line 1571, in create_server\n    raise OSError(err.errno, msg) from None\nPermissionError: [Errno 1] error while attempting to bind on address ('0.0.0.0', 8765): [errno 1] operation not permitted\n"}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:53.603088", "level": "INFO", "event": "info", "data": {"message": "Arret du systeme..."}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:53.701870", "level": "INFO", "event": "session_end", "data": {"session_id": "20260216_093646", "duration_sec": 6.8, "stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}, "session_id": "20260216_093646"}
+{"timestamp": "2026-02-16T09:36:53.702533", "level": "INFO", "event": "system_stop", "data": {"stats": {"events_logged": 4, "errors": 1, "warnings": 0, "state_changes": 0, "products_identified": 0, "security_alerts": 0}}}
+{"timestamp": "2026-02-16T09:36:53.703541", "level": "INFO", "event": "info", "data": {"message": "Systeme arrete proprement"}}
+{"timestamp": "2026-02-16T15:43:44.231688", "level": "INFO", "event": "info", "data": {"message": "  Fallback vocal HTTP: actif (transcription=whisper-1)"}}
+{"timestamp": "2026-02-16T17:26:09.244351", "level": "INFO", "event": "system_start", "data": {"mode": "simulation", "production": false}}
+{"timestamp": "2026-02-16T17:26:09.244730", "level": "INFO", "event": "info", "data": {"message": "Initialisation en mode simulation..."}}
+{"timestamp": "2026-02-16T17:26:09.245004", "level": "INFO", "event": "info", "data": {"message": "Chargement adaptateur robot..."}}
+{"timestamp": "2026-02-16T17:26:09.452422", "level": "INFO", "event": "info", "data": {"message": "  Adaptateur: MockAdapter (simulation)"}}
+{"timestamp": "2026-02-16T17:26:09.453099", "level": "INFO", "event": "info", "data": {"message": "Chargement base de donnees..."}}
+{"timestamp": "2026-02-16T17:26:09.463410", "level": "INFO", "event": "info", "data": {"message": "  Base de donnees: 30 produits"}}
+{"timestamp": "2026-02-16T17:26:09.463857", "level": "INFO", "event": "info", "data": {"message": "Chargement module securite..."}}
+{"timestamp": "2026-02-16T17:26:09.467904", "level": "INFO", "event": "info", "data": {"message": "  Module securite: OK"}}
+{"timestamp": "2026-02-16T17:26:09.468277", "level": "INFO", "event": "info", "data": {"message": "Vision: mode simulation (desactive)"}}
+{"timestamp": "2026-02-16T17:26:09.468626", "level": "INFO", "event": "info", "data": {"message": "Audio: mode simulation"}}
+{"timestamp": "2026-02-16T17:26:09.468961", "level": "INFO", "event": "info", "data": {"message": "Chargement serveur tablette..."}}
+{"timestamp": "2026-02-16T17:26:09.482205", "level": "INFO", "event": "info", "data": {"message": "  Tablette WebSocket: ws://0.0.0.0:8765"}}
+{"timestamp": "2026-02-16T17:26:09.482745", "level": "INFO", "event": "info", "data": {"message": "Chargement orchestrateur..."}}
+{"timestamp": "2026-02-16T17:26:09.484716", "level": "INFO", "event": "info", "data": {"message": "  Orchestrateur: OK"}}
+{"timestamp": "2026-02-16T17:26:09.485754", "level": "INFO", "event": "info", "data": {"message": "  Tablette: handlers ask_question/start_visual_scan/start_barcode_scan/start_voice_question actifs"}}
+{"timestamp": "2026-02-16T17:26:09.485915", "level": "INFO", "event": "config_loaded", "data": {"modules_loaded": ["adapter:MockAdapter", "database", "security", "tablet", "orchestrator"]}}
+{"timestamp": "2026-02-16T17:26:09.486309", "level": "INFO", "event": "info", "data": {"message": "Tous les modules initialises"}}

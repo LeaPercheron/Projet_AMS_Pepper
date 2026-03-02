@@ -1,34 +1,16 @@
 #!/usr/bin/env python3
-"""
-Phase 4 - Prompt Système Parapharmacie
-======================================
-Prompts spécialisés pour l'assistant vocal parapharmacie.
-Injection dynamique du contexte produit.
-
-Usage:
-    from prompt_system import PromptManager, ProductContext
-
-    manager = PromptManager()
-    manager.set_product_context(ProductContext(
-        name="Klorane Shampooing Camomille",
-        brand="Klorane",
-        price="12.90€"
-    ))
-    prompt = manager.get_full_prompt()
-"""
+# Phase 4 - Prompt Système Parapharmacie
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
 
-# =============================================================================
 # CONTEXTE PRODUIT
-# =============================================================================
 
 @dataclass
 class ProductContext:
-    """Contexte du produit actuellement présenté."""
+    # Contexte du produit actuellement présenté.
     name: str = ""
     brand: str = ""
     category: str = ""
@@ -45,7 +27,7 @@ class ProductContext:
     precautions: List[str] = field(default_factory=list)
 
     def to_prompt_text(self) -> str:
-        """Génère le texte à injecter dans le prompt."""
+        # Génère le texte à injecter dans le prompt.
         if not self.name:
             return "Aucun produit sélectionné actuellement."
 
@@ -79,7 +61,7 @@ class ProductContext:
 
     @classmethod
     def from_database(cls, product_dict: Dict[str, Any]) -> 'ProductContext':
-        """Crée un contexte depuis un dict de la base de données."""
+        # Crée un contexte depuis un dict de la base de données.
         return cls(
             name=product_dict.get('name', ''),
             brand=product_dict.get('brand', ''),
@@ -96,12 +78,10 @@ class ProductContext:
         )
 
 
-# =============================================================================
 # PROMPTS SYSTÈME
-# =============================================================================
 
 class PromptStyle(Enum):
-    """Styles de réponse."""
+    # Styles de réponse.
     CONCISE = "concise"        # 2-3 phrases max
     DETAILED = "detailed"      # Réponses plus longues
     FRIENDLY = "friendly"      # Ton amical
@@ -175,16 +155,13 @@ Si aucun produit n'est présenté, propose ton aide:
 """
 
 
-# =============================================================================
 # GESTIONNAIRE DE PROMPT
-# =============================================================================
 
 class PromptManager:
-    """
-    Gestionnaire de prompt avec injection de contexte dynamique.
-    """
+    # Gestionnaire de prompt avec injection de contexte dynamique.
 
     def __init__(self, style: PromptStyle = PromptStyle.CONCISE):
+        # Initialise l'objet.
         self.style = style
         self.product_context: Optional[ProductContext] = None
         self._custom_instructions: List[str] = []
@@ -198,28 +175,23 @@ class PromptManager:
         }
 
     def set_product_context(self, context: Optional[ProductContext]):
-        """Définit le contexte produit actuel."""
+        # Définit le contexte produit actuel.
         self.product_context = context
 
     def clear_product_context(self):
-        """Efface le contexte produit."""
+        # Efface le contexte produit.
         self.product_context = None
 
     def add_custom_instruction(self, instruction: str):
-        """Ajoute une instruction personnalisée."""
+        # Ajoute une instruction personnalisée.
         self._custom_instructions.append(instruction)
 
     def clear_custom_instructions(self):
-        """Efface les instructions personnalisées."""
+        # Efface les instructions personnalisées.
         self._custom_instructions.clear()
 
     def get_full_prompt(self) -> str:
-        """
-        Génère le prompt complet avec contexte.
-
-        Returns:
-            Prompt système complet
-        """
+        # Génère le prompt complet avec contexte.
         config = self._style_config[self.style]
 
         # Construire le prompt
@@ -250,26 +222,16 @@ class PromptManager:
         return "\n\n".join(parts)
 
     def get_greeting_prompt(self) -> str:
-        """Retourne le prompt pour les salutations."""
+        # Retourne le prompt pour les salutations.
         if self.product_context and self.product_context.category:
             return f"Bonjour ! Je vois que tu as un {self.product_context.category}. Tu veux des informations dessus ?"
         return "Bonjour ! Je suis Pepper, l'assistant du rayon capillaire. Comment puis-je t'aider ?"
 
 
-# =============================================================================
 # PROMPTS PRÉDÉFINIS
-# =============================================================================
 
 def get_parapharmacie_prompt(product: Optional[Dict[str, Any]] = None) -> str:
-    """
-    Crée un prompt parapharmacie prêt à l'emploi.
-
-    Args:
-        product: Dictionnaire du produit (optionnel)
-
-    Returns:
-        Prompt système complet
-    """
+    # Crée un prompt parapharmacie prêt à l'emploi.
     manager = PromptManager(style=PromptStyle.CONCISE)
 
     if product:
@@ -280,7 +242,7 @@ def get_parapharmacie_prompt(product: Optional[Dict[str, Any]] = None) -> str:
 
 
 def get_demo_prompt() -> str:
-    """Retourne un prompt pour la démo avec un produit fictif."""
+    # Retourne un prompt pour la démo avec un produit fictif.
     manager = PromptManager(style=PromptStyle.FRIENDLY)
 
     # Produit exemple
@@ -300,9 +262,7 @@ def get_demo_prompt() -> str:
     return manager.get_full_prompt()
 
 
-# =============================================================================
 # RÉPONSES TYPES
-# =============================================================================
 
 RESPONSE_TEMPLATES = {
     "medical_redirect": "Je ne suis pas habilité à répondre à cette question. Je te conseille de demander au pharmacien.",
@@ -322,25 +282,14 @@ RESPONSE_TEMPLATES = {
 
 
 def get_response_template(template_key: str, **kwargs) -> str:
-    """
-    Retourne une réponse type formatée.
-
-    Args:
-        template_key: Clé du template
-        **kwargs: Variables à injecter
-
-    Returns:
-        Réponse formatée
-    """
+    # Retourne une réponse type formatée.
     template = RESPONSE_TEMPLATES.get(template_key, "")
     if kwargs:
         return template.format(**kwargs)
     return template
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     print("=" * 70)

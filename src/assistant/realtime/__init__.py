@@ -1,20 +1,4 @@
-"""
-Module OpenAI Realtime
-======================
-Client WebSocket pour l'API OpenAI Realtime.
-
-Usage:
-    from assistant.realtime import OpenAIRealtimeClient, RealtimeConfig
-    from assistant.realtime import create_parapharmacie_client
-
-    # Client personnalise
-    client = OpenAIRealtimeClient(config)
-    client.connect()
-    client.send_audio(audio_bytes)
-
-    # Client pre-configure parapharmacie
-    client = create_parapharmacie_client()
-"""
+# Module OpenAI Realtime
 
 from .client import (
     OpenAIRealtimeClient,

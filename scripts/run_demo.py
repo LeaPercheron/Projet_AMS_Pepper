@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Demo Interactive
-================
-Lance une demo interactive de l'assistant en mode simulation.
-
-Usage:
-    python scripts/run_demo.py
-    python scripts/run_demo.py --verbose
-"""
+# Demo Interactive
 
 import sys
 import argparse
@@ -19,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 async def run_demo(verbose: bool = False):
-    """Execute la demo interactive."""
+    # Execute la demo interactive.
     print("=" * 60)
     print("DEMO ASSISTANT PARAPHARMACIE")
     print("=" * 60)
@@ -84,6 +76,7 @@ async def run_demo(verbose: bool = False):
 
 
 def main():
+    # Gere l'action.
     parser = argparse.ArgumentParser(description="Demo assistant parapharmacie")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Mode verbeux")

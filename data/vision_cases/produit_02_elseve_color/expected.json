@@ -1,0 +1,14 @@
+{
+  "ean13": "3600523735501",
+  "product_name": "L'Oreal Elseve Color-Vive Shampooing",
+  "brand": "L'Oreal Paris",
+  "expected_top1": "Elseve Color-Vive",
+  "expected_top3": [
+    "Elseve Color-Vive",
+    "Elseve Hyaluron Repulp",
+    "Garnier Ultra Doux"
+  ],
+  "barcode_visible_frames": [2, 3],
+  "difficulty": "medium",
+  "notes": "Produit de cote, etiquette partiellement visible"
+}

@@ -1,14 +1,4 @@
-"""
-Systeme de Logging
-==================
-Logging JSONL structure pour monitoring et analyse.
-
-Usage:
-    from assistant.logger import SystemLogger, get_logger, LogEvent
-
-    logger = get_logger()
-    logger.log_event(LogEvent.SYSTEM_START, {"mode": "development"})
-"""
+# Systeme de Logging
 
 import json
 import logging
@@ -23,7 +13,7 @@ import traceback
 
 
 class LogEvent(Enum):
-    """Types d'evenements loggables."""
+    # Types d'evenements loggables.
     # Systeme
     SYSTEM_START = "system_start"
     SYSTEM_STOP = "system_stop"
@@ -70,36 +60,29 @@ class LogEvent(Enum):
 
 @dataclass
 class LatencyTimer:
-    """Mesure de latence pour operations critiques."""
+    # Mesure de latence pour operations critiques.
     name: str
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
 
     def stop(self) -> float:
-        """Arrete le timer et retourne la duree en ms."""
+        # Arrete le timer et retourne la duree en ms.
         self.end_time = time.time()
         return (self.end_time - self.start_time) * 1000
 
     @property
     def duration_ms(self) -> float:
+        # Gere ms.
         if self.end_time:
             return (self.end_time - self.start_time) * 1000
         return (time.time() - self.start_time) * 1000
 
 
 class SystemLogger:
-    """
-    Gestionnaire de logs structure JSONL.
-
-    Chaque ligne du fichier log est un objet JSON avec:
-    - timestamp: ISO 8601
-    - level: DEBUG, INFO, WARNING, ERROR, CRITICAL
-    - event: Type d'evenement (LogEvent)
-    - data: Donnees associees
-    - session_id: ID de session (optionnel)
-    """
+    # Gestionnaire de logs structure JSONL.
 
     def __init__(
+        # Initialise l'objet.
         self,
         log_directory: str = "logs",
         file_prefix: str = "assistant",
@@ -139,7 +122,7 @@ class SystemLogger:
         self._file_handle = None
 
     def _setup_console_logger(self):
-        """Configure le logger console."""
+        # Configure le logger console.
         self._console = logging.getLogger(f"assistant.{self.file_prefix}")
         self._console.setLevel(logging.DEBUG)
 
@@ -155,7 +138,7 @@ class SystemLogger:
             self._console.addHandler(handler)
 
     def _write_jsonl(self, level: str, event: str, data: Dict[str, Any]):
-        """Ecrit une ligne JSONL dans le fichier."""
+        # Ecrit une ligne JSONL dans le fichier.
         record = {
             "timestamp": datetime.now().isoformat(),
             "level": level,
@@ -173,7 +156,7 @@ class SystemLogger:
             self._console.error(f"Erreur ecriture log: {e}")
 
     def log_event(self, event: LogEvent, data: Optional[Dict[str, Any]] = None):
-        """Logue un evenement structure."""
+        # Logue un evenement structure.
         data = data or {}
         self._write_jsonl("INFO", event.value, data)
         self._stats["events_logged"] += 1
@@ -187,7 +170,7 @@ class SystemLogger:
             self._stats["security_alerts"] += 1
 
     def log_state_change(self, from_state: str, to_state: str, trigger: str = ""):
-        """Logue un changement d'etat."""
+        # Logue un changement d'etat.
         self.log_event(LogEvent.STATE_CHANGE, {
             "from": from_state,
             "to": to_state,
@@ -196,7 +179,7 @@ class SystemLogger:
         self._console.info(f"Etat: {from_state} -> {to_state} ({trigger})")
 
     def log_latency(self, name: str, duration_ms: float, threshold_ms: float = 0):
-        """Logue une mesure de latence."""
+        # Logue une mesure de latence.
         is_slow = duration_ms > threshold_ms if threshold_ms > 0 else False
         self.log_event(LogEvent.LATENCY_MEASURE, {
             "name": name,
@@ -208,24 +191,24 @@ class SystemLogger:
             self._console.warning(f"Latence elevee: {name} = {duration_ms:.1f}ms (seuil: {threshold_ms}ms)")
 
     def log_debug(self, message: str, **kwargs):
-        """Log niveau DEBUG."""
+        # Log niveau DEBUG.
         self._console.debug(message)
         if self.file_level <= logging.DEBUG:
             self._write_jsonl("DEBUG", "debug", {"message": message, **kwargs})
 
     def log_info(self, message: str, **kwargs):
-        """Log niveau INFO."""
+        # Log niveau INFO.
         self._console.info(message)
         self._write_jsonl("INFO", "info", {"message": message, **kwargs})
 
     def log_warning(self, message: str, **kwargs):
-        """Log niveau WARNING."""
+        # Log niveau WARNING.
         self._console.warning(message)
         self._write_jsonl("WARNING", "warning", {"message": message, **kwargs})
         self._stats["warnings"] += 1
 
     def log_error(self, message: str, exception: Optional[Exception] = None, **kwargs):
-        """Log niveau ERROR."""
+        # Log niveau ERROR.
         error_data = {"message": message, **kwargs}
         if exception:
             error_data["exception"] = str(exception)
@@ -239,7 +222,7 @@ class SystemLogger:
         self._stats["errors"] += 1
 
     def log_critical(self, message: str, exception: Optional[Exception] = None, **kwargs):
-        """Log niveau CRITICAL."""
+        # Log niveau CRITICAL.
         error_data = {"message": message, **kwargs}
         if exception:
             error_data["exception"] = str(exception)
@@ -250,14 +233,14 @@ class SystemLogger:
         self._stats["errors"] += 1
 
     def start_session(self) -> str:
-        """Demarre une nouvelle session et retourne l'ID."""
+        # Demarre une nouvelle session et retourne l'ID.
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._session_start = time.time()
         self.log_event(LogEvent.SESSION_START, {"session_id": self.session_id})
         return self.session_id
 
     def end_session(self, stats: Optional[Dict[str, Any]] = None):
-        """Termine la session."""
+        # Termine la session.
         duration_sec = time.time() - self._session_start if self._session_start else 0
         self.log_event(LogEvent.SESSION_END, {
             "session_id": self.session_id,
@@ -268,27 +251,29 @@ class SystemLogger:
         self._session_start = None
 
     def get_stats(self) -> Dict[str, Any]:
-        """Retourne les statistiques de la session."""
+        # Retourne les statistiques de la session.
         return self._stats.copy()
 
     def close(self):
-        """Ferme le logger."""
+        # Ferme le logger.
         if self._file_handle:
             self._file_handle.close()
 
     def __enter__(self):
+        # Gere l'action.
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # Gere l'action.
         self.close()
 
 
-# ==================== SINGLETON ====================
 
 _logger_instance: Optional[SystemLogger] = None
 
 
 def get_logger(
+    # Recupere logger.
     log_directory: str = "logs",
     file_prefix: str = "assistant",
     console_level: str = "INFO",
@@ -320,7 +305,7 @@ def get_logger(
 
 
 def reset_logger():
-    """Reinitialise le logger (pour les tests)."""
+    # Reinitialise le logger (pour les tests).
     global _logger_instance
     if _logger_instance:
         _logger_instance.close()

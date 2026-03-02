@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 4 - Configuration VAD (Voice Activity Detection)
-======================================================
-Paramètres optimisés pour la détection de fin de parole.
-Gère les hésitations, pauses naturelles et bruit ambiant.
-
-Usage:
-    from vad_config import get_vad_config, VADPreset
-
-    config = get_vad_config(VADPreset.HESITANT_SPEAKER)
-"""
+# Phase 4 - Configuration VAD (Voice Activity Detection)
 
 from enum import Enum
 from dataclasses import dataclass
@@ -17,7 +7,7 @@ from typing import Dict, Any
 
 
 class VADPreset(Enum):
-    """Presets VAD pour différentes situations."""
+    # Presets VAD pour différentes situations.
     DEFAULT = "default"              # Configuration équilibrée
     HESITANT_SPEAKER = "hesitant"    # Locuteur hésitant ("euh...")
     FAST_SPEAKER = "fast"            # Locuteur rapide
@@ -28,20 +18,7 @@ class VADPreset(Enum):
 
 @dataclass
 class VADConfig:
-    """
-    Configuration VAD pour OpenAI Realtime.
-
-    Paramètres:
-        type: "server_vad" (recommandé) ou "none"
-        threshold: Sensibilité de détection (0.0-1.0)
-            - 0.0 = très sensible (détecte tout)
-            - 1.0 = peu sensible (ne détecte que voix forte)
-        prefix_padding_ms: Audio conservé AVANT la détection de parole
-            - Évite de couper le début des mots
-        silence_duration_ms: Durée de silence pour considérer fin de phrase
-            - Court = réponses rapides mais coupures possibles
-            - Long = moins de coupures mais latence accrue
-    """
+    # Configuration VAD pour OpenAI Realtime.
     type: str = "server_vad"
     threshold: float = 0.5
     prefix_padding_ms: int = 300
@@ -52,7 +29,7 @@ class VADConfig:
     max_speech_duration_ms: int = 30000  # Timeout après 30s
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convertit en dict pour l'API OpenAI."""
+        # Convertit en dict pour l'API OpenAI.
         return {
             "type": self.type,
             "threshold": self.threshold,
@@ -61,9 +38,7 @@ class VADConfig:
         }
 
 
-# =============================================================================
 # PRESETS VAD
-# =============================================================================
 
 VAD_PRESETS: Dict[VADPreset, VADConfig] = {
     # Configuration par défaut - équilibrée
@@ -117,19 +92,12 @@ VAD_PRESETS: Dict[VADPreset, VADConfig] = {
 
 
 def get_vad_config(preset: VADPreset = VADPreset.DEFAULT) -> VADConfig:
-    """
-    Retourne la configuration VAD pour un preset donné.
-
-    Args:
-        preset: Preset VAD à utiliser
-
-    Returns:
-        Configuration VAD
-    """
+    # Retourne la configuration VAD pour un preset donné.
     return VAD_PRESETS.get(preset, VAD_PRESETS[VADPreset.DEFAULT])
 
 
 def create_custom_vad_config(
+    # Cree custom vad config.
     threshold: float = 0.5,
     silence_duration_ms: int = 500,
     prefix_padding_ms: int = 300
@@ -153,9 +121,7 @@ def create_custom_vad_config(
     )
 
 
-# =============================================================================
 # RECOMMANDATIONS PAR SITUATION
-# =============================================================================
 
 VAD_RECOMMENDATIONS = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -197,13 +163,11 @@ VAD_RECOMMENDATIONS = """
 
 
 def print_recommendations():
-    """Affiche les recommandations VAD."""
+    # Affiche les recommandations VAD.
     print(VAD_RECOMMENDATIONS)
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     print("=" * 60)

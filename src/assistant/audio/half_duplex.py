@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""
-Phase 4 - Stratégie Demi-Duplex
-===============================
-Gère le flag pepper_is_speaking pour éviter les boucles audio.
-Remplace le buffer d'entrée par des zéros quand Pepper parle.
-
-Usage:
-    from half_duplex import HalfDuplexManager
-
-    manager = HalfDuplexManager()
-
-    # Quand Pepper commence à parler
-    manager.start_speaking()
-
-    # Filtrer l'audio entrant
-    filtered = manager.filter_input_audio(audio_bytes)
-
-    # Quand Pepper arrête de parler
-    manager.stop_speaking()
-"""
+# Phase 4 - Stratégie Demi-Duplex
 
 import threading
 import time
@@ -29,7 +10,7 @@ from enum import Enum
 
 
 class SpeakingState(Enum):
-    """États du robot."""
+    # États du robot.
     LISTENING = "listening"      # Robot écoute
     SPEAKING = "speaking"        # Robot parle
     COOLDOWN = "cooldown"        # Période tampon après parole
@@ -37,7 +18,7 @@ class SpeakingState(Enum):
 
 @dataclass
 class HalfDuplexConfig:
-    """Configuration demi-duplex."""
+    # Configuration demi-duplex.
     # Délai après fin de parole avant de réécouter
     cooldown_ms: int = 200
 
@@ -53,7 +34,7 @@ class HalfDuplexConfig:
 
 @dataclass
 class SpeakingStats:
-    """Statistiques de parole."""
+    # Statistiques de parole.
     total_speaking_time_ms: float = 0
     total_listening_time_ms: float = 0
     speaking_count: int = 0
@@ -66,14 +47,10 @@ class SpeakingStats:
 
 
 class HalfDuplexManager:
-    """
-    Gestionnaire demi-duplex pour éviter les boucles audio.
-
-    Quand Pepper parle, l'audio d'entrée est remplacé par du silence
-    pour éviter que le robot ne s'entende lui-même et ne crée une boucle.
-    """
+    # Gestionnaire demi-duplex pour éviter les boucles audio.
 
     def __init__(self, config: Optional[HalfDuplexConfig] = None):
+        # Initialise l'objet.
         self.config = config or HalfDuplexConfig()
 
         # État actuel
@@ -95,24 +72,24 @@ class HalfDuplexManager:
 
     @property
     def state(self) -> SpeakingState:
-        """État actuel."""
+        # État actuel.
         with self._state_lock:
             return self._state
 
     @property
     def is_speaking(self) -> bool:
-        """True si Pepper parle ou en cooldown."""
+        # True si Pepper parle ou en cooldown.
         with self._state_lock:
             return self._state in (SpeakingState.SPEAKING, SpeakingState.COOLDOWN)
 
     @property
     def is_listening(self) -> bool:
-        """True si Pepper écoute."""
+        # True si Pepper écoute.
         with self._state_lock:
             return self._state == SpeakingState.LISTENING
 
     def start_speaking(self):
-        """Appelé quand Pepper commence à parler."""
+        # Appelé quand Pepper commence à parler.
         with self._state_lock:
             if self._state == SpeakingState.SPEAKING:
                 return  # Déjà en train de parler
@@ -141,7 +118,7 @@ class HalfDuplexManager:
         self._notify_state_change(SpeakingState.SPEAKING)
 
     def stop_speaking(self):
-        """Appelé quand Pepper arrête de parler."""
+        # Appelé quand Pepper arrête de parler.
         with self._state_lock:
             if self._state != SpeakingState.SPEAKING:
                 return  # N'était pas en train de parler
@@ -171,7 +148,7 @@ class HalfDuplexManager:
         self._notify_state_change(SpeakingState.COOLDOWN)
 
     def _end_cooldown(self):
-        """Fin de la période de cooldown."""
+        # Fin de la période de cooldown.
         with self._state_lock:
             if self._state != SpeakingState.COOLDOWN:
                 return
@@ -187,16 +164,7 @@ class HalfDuplexManager:
         self._notify_state_change(SpeakingState.LISTENING)
 
     def filter_input_audio(self, audio_bytes: bytes, sample_width: int = 2) -> bytes:
-        """
-        Filtre l'audio d'entrée selon l'état.
-
-        Args:
-            audio_bytes: Audio PCM brut
-            sample_width: Octets par sample (2 = 16-bit)
-
-        Returns:
-            Audio original si écoute, silence si parle
-        """
+        # Filtre l'audio d'entrée selon l'état.
         if self.is_listening:
             return audio_bytes
 
@@ -214,6 +182,7 @@ class HalfDuplexManager:
             return bytes(len(audio_bytes))
 
     def filter_input_audio_with_fade(
+        # Gere input audio with fade.
         self,
         audio_bytes: bytes,
         sample_rate: int = 24000,
@@ -268,21 +237,21 @@ class HalfDuplexManager:
         return struct.pack(f'<{num_samples}h', *samples)
 
     def _is_near_state_change(self) -> bool:
-        """True si proche d'un changement d'état (pour fade)."""
+        # True si proche d'un changement d'état (pour fade).
         time_since_change = (time.time() - self.stats.last_state_change) * 1000
         return time_since_change < self.config.fade_duration_ms * 2
 
     def register_callback(self, callback: Callable[[SpeakingState], None]):
-        """Enregistre un callback pour les changements d'état."""
+        # Enregistre un callback pour les changements d'état.
         self._on_state_change.append(callback)
 
     def unregister_callback(self, callback: Callable[[SpeakingState], None]):
-        """Supprime un callback."""
+        # Supprime un callback.
         if callback in self._on_state_change:
             self._on_state_change.remove(callback)
 
     def _notify_state_change(self, new_state: SpeakingState):
-        """Notifie tous les callbacks."""
+        # Notifie tous les callbacks.
         for callback in self._on_state_change:
             try:
                 callback(new_state)
@@ -290,7 +259,7 @@ class HalfDuplexManager:
                 print(f"[HalfDuplex] Erreur callback: {e}")
 
     def force_listening(self):
-        """Force le retour à l'état écoute (interruption)."""
+        # Force le retour à l'état écoute (interruption).
         with self._state_lock:
             if self._state == SpeakingState.LISTENING:
                 return
@@ -314,7 +283,7 @@ class HalfDuplexManager:
         self._notify_state_change(SpeakingState.LISTENING)
 
     def get_stats(self) -> dict:
-        """Retourne les statistiques."""
+        # Retourne les statistiques.
         session_duration = (time.time() - self.stats.session_start) * 1000
 
         return {
@@ -332,41 +301,29 @@ class HalfDuplexManager:
         }
 
     def reset_stats(self):
-        """Remet les statistiques à zéro."""
+        # Remet les statistiques à zéro.
         self.stats = SpeakingStats()
 
     def cleanup(self):
-        """Nettoyage des ressources."""
+        # Nettoyage des ressources.
         if self._cooldown_timer:
             self._cooldown_timer.cancel()
             self._cooldown_timer = None
         self._on_state_change.clear()
 
 
-# =============================================================================
 # INTÉGRATION AVEC OPENAI REALTIME
-# =============================================================================
 
 class RealtimeHalfDuplexAdapter:
-    """
-    Adaptateur pour intégrer HalfDuplex avec OpenAI Realtime.
-
-    Détecte automatiquement les événements de parole via les
-    événements response.audio.* de l'API.
-    """
+    # Adaptateur pour intégrer HalfDuplex avec OpenAI Realtime.
 
     def __init__(self, half_duplex: HalfDuplexManager):
+        # Initialise l'objet.
         self.half_duplex = half_duplex
         self._audio_started = False
 
     def handle_realtime_event(self, event_type: str, event_data: dict):
-        """
-        Gère les événements OpenAI Realtime.
-
-        Args:
-            event_type: Type d'événement
-            event_data: Données de l'événement
-        """
+        # Gère les événements OpenAI Realtime.
         # Début de réponse audio
         if event_type == "response.audio.delta":
             if not self._audio_started:
@@ -397,9 +354,7 @@ class RealtimeHalfDuplexAdapter:
                 self.half_duplex.stop_speaking()
 
 
-# =============================================================================
 # TEST
-# =============================================================================
 
 if __name__ == "__main__":
     import time
@@ -418,6 +373,7 @@ if __name__ == "__main__":
 
     # Callback de test
     def on_state_change(state: SpeakingState):
+        # Gere state change.
         print(f"  → Callback: nouvel état = {state.value}")
 
     manager.register_callback(on_state_change)
