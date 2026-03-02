@@ -48,6 +48,7 @@ class MessageType(Enum):
     PRODUCTS_LIST = "products_list"
     STATUS = "status"
     QA_ANSWER = "qa_answer"
+    VOICE_STATUS = "voice_status"
 
 
 class TabletCommand(Enum):
@@ -391,6 +392,25 @@ class TabletServer:
             "type": MessageType.QA_ANSWER.value,
             "question": question,
             "answer": answer
+        }
+        if websocket_or_broadcast is True:
+            await self.broadcast(message)
+        else:
+            await self._send_to_client(websocket_or_broadcast, message)
+
+    async def send_voice_status(
+        self,
+        websocket_or_broadcast,
+        status: str,
+        message_text: str,
+        title: str = "Question vocale",
+    ):
+        # Envoie l'état du mode vocal (écoute, traitement, terminé, erreur).
+        message = {
+            "type": MessageType.VOICE_STATUS.value,
+            "status": str(status or "").strip().lower(),
+            "title": title,
+            "message": message_text,
         }
         if websocket_or_broadcast is True:
             await self.broadcast(message)

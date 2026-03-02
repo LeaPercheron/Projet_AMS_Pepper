@@ -26,9 +26,24 @@ const CONFIG = {
         }
     })(),
 
-    // Timeouts
+    // Timeouts (0 => pas de timeout côté tablette)
     connectionTimeout: 5000,
-    scanTimeout: 30000,
+    scanTimeout: (() => {
+        try {
+            const v = Number(new URLSearchParams(window.location.search).get('scan_timeout_ms') || '0');
+            return Number.isFinite(v) && v > 0 ? v : 0;
+        } catch (e) {
+            return 0;
+        }
+    })(),
+    voiceListenDurationS: (() => {
+        try {
+            const v = Number(new URLSearchParams(window.location.search).get('voice_duration_s') || '12');
+            return Number.isFinite(v) ? Math.max(3, v) : 12;
+        } catch (e) {
+            return 12;
+        }
+    })(),
     placeholderImage: 'placeholder.png',
 
     // Debug
@@ -180,13 +195,14 @@ const App = {
             return;
         }
 
-        // Timeout de sécurité
-        setTimeout(() => {
-            if (AppState.currentScreen === 'loading') {
-                this.showScreen('scan-choice');
-                this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
-            }
-        }, CONFIG.scanTimeout);
+        if (CONFIG.scanTimeout > 0) {
+            setTimeout(() => {
+                if (AppState.currentScreen === 'loading') {
+                    this.showScreen('scan-choice');
+                    this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
+                }
+            }, CONFIG.scanTimeout);
+        }
     },
 
     /**
@@ -203,11 +219,13 @@ const App = {
             return;
         }
 
-        setTimeout(() => {
-            if (AppState.currentScreen === 'barcode-scan') {
-                this.updateBarcodeStatus('error', 'Le scan a pris trop de temps. Réessayez.');
-            }
-        }, CONFIG.scanTimeout);
+        if (CONFIG.scanTimeout > 0) {
+            setTimeout(() => {
+                if (AppState.currentScreen === 'barcode-scan') {
+                    this.updateBarcodeStatus('error', 'Le scan a pris trop de temps. Réessayez.');
+                }
+            }, CONFIG.scanTimeout);
+        }
     },
 
     /**
@@ -215,12 +233,12 @@ const App = {
      */
     startVoiceQuestion() {
         this.log('Démarrage question vocale fallback');
-        const sent = this.sendCommand('start_voice_question', { duration_s: 9 });
+        const sent = this.sendCommand('start_voice_question', { duration_s: CONFIG.voiceListenDurationS });
         if (!sent) {
             this.showError('Connexion tablette indisponible.');
             return;
         }
-        this.showLoading('Parlez, Pepper vous écoute...');
+        this.showLoading('Micro activé. Parlez maintenant...');
     },
 
     askTextQuestion() {
@@ -536,6 +554,20 @@ const App = {
                 case 'qa_answer':
                     this.showSecurityMessage('Réponse Pepper', message.answer || 'Réponse vide');
                     break;
+
+                case 'voice_status': {
+                    const status = String(message.status || '').toLowerCase();
+                    const title = message.title || 'Question vocale';
+                    const text = message.message || '';
+                    if (status === 'listening' || status === 'processing') {
+                        this.showLoading(text || 'Traitement vocal en cours...');
+                    } else if (status === 'timeout' || status === 'error') {
+                        this.showSecurityMessage(title, text || "Je n'ai pas bien entendu.");
+                    } else if (status === 'done' && AppState.currentScreen === 'loading') {
+                        this.showScreen('advice');
+                    }
+                    break;
+                }
 
                 default:
                     this.log('Message non géré:', message.type);

@@ -100,6 +100,8 @@ class PepperAssistant:
         self._tablet_text_question_enabled = text_q_env in {"1", "true", "yes", "on"}
         self._voice_request_seq = 0
         self._voice_transcript_seq = 0
+        self._voice_status_seq = 0
+        self._realtime_tablet_callbacks_registered = False
         self._scan_dump_logged = False
 
     async def setup(self):
@@ -278,6 +280,7 @@ class PepperAssistant:
 
                 self.openai_client = OpenAIRealtimeClient(realtime_config)
                 self.logger.log_info(f"  OpenAI Realtime: {self.config.openai.model}")
+                self._register_realtime_tablet_callbacks()
 
         except ImportError as e:
             self.logger.log_warning(f"Module OpenAI non disponible: {e}")
@@ -426,11 +429,101 @@ class PepperAssistant:
         except Exception as e:
             self.logger.log_warning(f"  Fallback vocal HTTP non initialisé: {e}")
 
+    def _register_realtime_tablet_callbacks(self):
+        # Remonte les états vocaux Realtime vers l'UI tablette.
+        if not self.openai_client or self._realtime_tablet_callbacks_registered:
+            return
+        try:
+            self.openai_client.on(
+                "on_speech_started",
+                lambda: self._push_voice_status_threadsafe(
+                    "listening",
+                    "Voix détectée. Je vous écoute...",
+                    "Question vocale",
+                ),
+            )
+            self.openai_client.on(
+                "on_speech_stopped",
+                lambda: self._push_voice_status_threadsafe(
+                    "processing",
+                    "Merci. Je prépare la réponse...",
+                    "Question vocale",
+                ),
+            )
+            self.openai_client.on(
+                "on_response_start",
+                lambda: self._push_voice_status_threadsafe(
+                    "processing",
+                    "Génération de la réponse en cours...",
+                    "Question vocale",
+                ),
+            )
+            self.openai_client.on(
+                "on_response_end",
+                lambda: self._push_voice_status_threadsafe(
+                    "done",
+                    "Réponse envoyée.",
+                    "Question vocale",
+                ),
+            )
+            self._realtime_tablet_callbacks_registered = True
+        except Exception as e:
+            self.logger.log_warning(f"  Realtime UI callbacks non initialisés: {e}")
+
+    async def _push_voice_status(
+        self,
+        status: str,
+        message: str,
+        title: str = "Question vocale",
+        websocket: Any = True,
+    ):
+        # Publie l'état courant du micro / traitement côté tablette.
+        if not self.tablet_server or not hasattr(self.tablet_server, "send_voice_status"):
+            return
+        try:
+            await self.tablet_server.send_voice_status(
+                websocket,
+                status=status,
+                message_text=message,
+                title=title,
+            )
+        except Exception:
+            pass
+
+    def _push_voice_status_threadsafe(
+        self,
+        status: str,
+        message: str,
+        title: str = "Question vocale",
+        websocket: Any = True,
+    ):
+        # Version thread-safe pour callbacks audio/realtime.
+        if not self._main_loop:
+            return
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                self._push_voice_status(
+                    status=status,
+                    message=message,
+                    title=title,
+                    websocket=websocket,
+                ),
+                self._main_loop
+            )
+            fut.result(timeout=2.0)
+        except Exception:
+            pass
+
     def _on_voice_fallback_transcript(self, transcript: str):
         # Callback thread-safe: transcription utilisateur via fallback vocal.
         if not transcript:
             return
         self._voice_transcript_seq += 1
+        self._push_voice_status_threadsafe(
+            "processing",
+            "Question reçue. Je prépare la réponse...",
+            "Question vocale",
+        )
         if self.orchestrator:
             try:
                 from assistant.orchestrator import Event
@@ -452,6 +545,11 @@ class PepperAssistant:
                     self._main_loop
                 )
                 fut.result(timeout=2.0)
+            self._push_voice_status_threadsafe(
+                "done",
+                "Réponse envoyée.",
+                "Question vocale",
+            )
         except Exception:
             pass
 
@@ -818,11 +916,71 @@ class PepperAssistant:
         return any(marker in text for marker in markers)
 
     async def _perform_visual_scan(self) -> Tuple[str, Any]:
+        attempts_raw = int(os.getenv("PEPPER_VISUAL_ATTEMPTS", "6") or 6)
+        base_frames = max(3, int(getattr(self.config.vision, "num_frames", 3) or 3))
+        frames_per_attempt = max(
+            1,
+            int(os.getenv("PEPPER_VISUAL_FRAMES", str(base_frames)) or base_frames)
+        )
+        frame_interval_s = max(0.05, float(os.getenv("PEPPER_VISUAL_FRAME_INTERVAL", "0.18") or 0.18))
+        between_attempt_s = max(0.05, float(os.getenv("PEPPER_VISUAL_ATTEMPT_COOLDOWN", "0.2") or 0.2))
+
+        unlimited = attempts_raw <= 0
+        attempts = attempts_raw if attempts_raw > 0 else 0
+        if unlimited:
+            self.logger.log_info(
+                "  Scan visuel: démarrage (tentatives illimitées, "
+                f"{frames_per_attempt} photos/tentative)"
+            )
+        else:
+            self.logger.log_info(
+                "  Scan visuel: démarrage "
+                f"({attempts} tentatives, {frames_per_attempt} photos/tentative)"
+            )
+
+        attempt = 0
+        while True:
+            attempt += 1
+            if not unlimited and attempt > attempts:
+                self.logger.log_warning("  Scan visuel: échec après toutes les tentatives")
+                return "barcode", "Le produit n'a pas pu être reconnu visuellement."
+
+            label_suffix = f"{attempt}/∞" if unlimited else f"{attempt}/{attempts}"
+            scan_label = f"Scan visuel tentative {label_suffix}"
+            self.logger.log_info(f"  {scan_label}: capture en cours")
+            mode, payload = await self._perform_visual_scan_once(
+                num_frames=frames_per_attempt,
+                interval_s=frame_interval_s,
+                scan_label=scan_label,
+            )
+            if mode in {"product", "top3", "error"}:
+                return mode, payload
+
+            # mode "barcode": on retente d'abord le visuel (si multi-tentatives),
+            # puis on bascule en code-barres une fois la boucle terminée.
+            if unlimited:
+                await asyncio.sleep(between_attempt_s)
+                continue
+            if attempt < attempts:
+                await asyncio.sleep(between_attempt_s)
+                continue
+
+            return mode, payload
+
+    async def _perform_visual_scan_once(
+        self,
+        num_frames: int,
+        interval_s: float,
+        scan_label: str,
+    ) -> Tuple[str, Any]:
         if not self.vision_pipeline:
             return "error", "Le module vision n'est pas disponible."
 
         images = await self._capture_scan_images(
-            num_frames=max(3, int(getattr(self.config.vision, "num_frames", 3) or 3))
+            num_frames=max(1, int(num_frames)),
+            interval_s=interval_s,
+            scan_label=scan_label,
+            log_frames=True,
         )
         if not images:
             return "error", "Aucune image capturée. Vérifiez la caméra Pepper."
@@ -918,18 +1076,32 @@ class PepperAssistant:
         if not self.vision_pipeline:
             return False, "", None
 
-        attempts = max(1, int(os.getenv("PEPPER_BARCODE_ATTEMPTS", "8") or 8))
+        attempts_raw = int(os.getenv("PEPPER_BARCODE_ATTEMPTS", "20") or 20)
         frames_per_attempt = max(1, int(os.getenv("PEPPER_BARCODE_FRAMES", "4") or 4))
         frame_interval_s = max(0.05, float(os.getenv("PEPPER_BARCODE_FRAME_INTERVAL", "0.14") or 0.14))
         between_attempt_s = max(0.05, float(os.getenv("PEPPER_BARCODE_ATTEMPT_COOLDOWN", "0.2") or 0.2))
+        unlimited = attempts_raw <= 0
+        attempts = attempts_raw if attempts_raw > 0 else 0
 
-        self.logger.log_info(
-            "  Scan code-barres: démarrage "
-            f"({attempts} tentatives, {frames_per_attempt} photos/tentative)"
-        )
+        if unlimited:
+            self.logger.log_info(
+                "  Scan code-barres: démarrage (tentatives illimitées, "
+                f"{frames_per_attempt} photos/tentative)"
+            )
+        else:
+            self.logger.log_info(
+                "  Scan code-barres: démarrage "
+                f"({attempts} tentatives, {frames_per_attempt} photos/tentative)"
+            )
 
-        for attempt in range(1, attempts + 1):
-            scan_label = f"Scan code-barres tentative {attempt}/{attempts}"
+        attempt = 0
+        while True:
+            attempt += 1
+            if not unlimited and attempt > attempts:
+                break
+
+            label_suffix = f"{attempt}/∞" if unlimited else f"{attempt}/{attempts}"
+            scan_label = f"Scan code-barres tentative {label_suffix}"
             self.logger.log_info(f"  {scan_label}: capture en cours")
             images = await self._capture_scan_images(
                 num_frames=frames_per_attempt,
@@ -1118,10 +1290,11 @@ class PepperAssistant:
     async def _handle_tablet_start_voice_question(self, websocket, data):
         # Déclenche une fenêtre d'écoute vocale fallback via bouton tablette.
         if self._is_realtime_connected():
-            await self.tablet_server.send_security_alert(
-                websocket,
-                "Mode vocal",
-                "Realtime est déjà actif. Vous pouvez parler directement."
+            await self._push_voice_status(
+                status="listening",
+                message="Realtime actif. Parlez maintenant, Pepper vous écoute.",
+                title="Question vocale",
+                websocket=websocket,
             )
             return
 
@@ -1132,7 +1305,7 @@ class PepperAssistant:
             )
             return
 
-        duration = 9.0
+        duration = float(os.getenv("PEPPER_VOICE_LISTEN_DURATION_S", "12") or 12.0)
         try:
             requested = float((data or {}).get("duration_s", duration))
             duration = max(3.0, min(20.0, requested))
@@ -1164,10 +1337,12 @@ class PepperAssistant:
         request_id = self._voice_request_seq
         transcript_seq_before = self._voice_transcript_seq
 
-        await self.tablet_server.send_security_alert(
-            websocket,
-            "Question vocale",
-            f"Parlez maintenant. Fenêtre d'écoute active pendant {int(duration)} secondes."
+        self.logger.log_info(f"  Tablette: question vocale démarrée (durée={duration:.1f}s)")
+        await self._push_voice_status(
+            status="listening",
+            message=f"Micro activé. Parlez maintenant ({int(duration)} s).",
+            title="Question vocale",
+            websocket=websocket,
         )
         asyncio.create_task(
             self._notify_voice_timeout_if_silent(
@@ -1195,11 +1370,19 @@ class PepperAssistant:
         if not self.tablet_server:
             return
 
+        await self._push_voice_status(
+            status="processing",
+            message="Fenêtre d'écoute terminée. Analyse de votre question...",
+            title="Question vocale",
+            websocket=websocket,
+        )
+
         try:
-            await self.tablet_server.send_security_alert(
-                websocket,
-                "Question vocale",
-                "Je n'ai pas bien entendu. Rapprochez-vous et parlez clairement, puis réessayez."
+            await self._push_voice_status(
+                status="timeout",
+                message="Je n'ai pas bien entendu. Rapprochez-vous et parlez clairement, puis réessayez.",
+                title="Question vocale",
+                websocket=websocket,
             )
             if self.adapter and hasattr(self.adapter, "say"):
                 await asyncio.to_thread(

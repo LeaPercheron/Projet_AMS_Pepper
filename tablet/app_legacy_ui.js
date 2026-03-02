@@ -18,6 +18,21 @@
         return "";
     }
 
+    function getNumberFromQuery(name, defaultValue) {
+        var search = window.location.search || "";
+        var re = new RegExp("(?:[?&])" + name + "=([^&]+)(?:&|$)");
+        var match = search.match(re);
+        if (!match || !match[1]) {
+            return defaultValue;
+        }
+        try {
+            var parsed = Number(decodeURIComponent(match[1]));
+            return isNaN(parsed) ? defaultValue : parsed;
+        } catch (e) {
+            return defaultValue;
+        }
+    }
+
     var CONFIG = {
         serverUrl: (function () {
             var fromQuery = getWsFromQuery();
@@ -31,7 +46,9 @@
             var search = window.location.search || "";
             return /(?:[?&])textq=1(?:&|$)/.test(search);
         })(),
-        scanTimeout: 30000,
+        // 0 => pas de timeout côté tablette (le backend pilote la durée).
+        scanTimeout: Math.max(0, getNumberFromQuery("scan_timeout_ms", 0)),
+        voiceListenDurationS: Math.max(3, getNumberFromQuery("voice_duration_s", 12)),
         placeholderImage: "placeholder.png",
         debug: true
     };
@@ -224,13 +241,15 @@
                 return;
             }
 
-            var self = this;
-            setTimeout(function () {
-                if (AppState.currentScreen === "loading") {
-                    self.showScreen("scan-choice");
-                    self.showError("Le scan a pris trop de temps. Veuillez réessayer.");
-                }
-            }, CONFIG.scanTimeout);
+            if (CONFIG.scanTimeout > 0) {
+                var self = this;
+                setTimeout(function () {
+                    if (AppState.currentScreen === "loading") {
+                        self.showScreen("scan-choice");
+                        self.showError("Le scan a pris trop de temps. Veuillez réessayer.");
+                    }
+                }, CONFIG.scanTimeout);
+            }
         },
 
         startBarcodeScan: function () {
@@ -241,20 +260,22 @@
                 return;
             }
 
-            var self = this;
-            setTimeout(function () {
-                if (AppState.currentScreen === "barcode-scan") {
-                    self.updateBarcodeStatus("error", "Le scan a pris trop de temps. Réessayez.");
-                }
-            }, CONFIG.scanTimeout);
+            if (CONFIG.scanTimeout > 0) {
+                var self = this;
+                setTimeout(function () {
+                    if (AppState.currentScreen === "barcode-scan") {
+                        self.updateBarcodeStatus("error", "Le scan a pris trop de temps. Réessayez.");
+                    }
+                }, CONFIG.scanTimeout);
+            }
         },
 
         startVoiceQuestion: function () {
-            if (!this.sendCommand("start_voice_question", { duration_s: 9 })) {
+            if (!this.sendCommand("start_voice_question", { duration_s: CONFIG.voiceListenDurationS })) {
                 this.showError("Connexion tablette indisponible.");
                 return;
             }
-            this.showLoading("Parlez, Pepper vous écoute...");
+            this.showLoading("Micro activé. Parlez maintenant...");
         },
 
         askTextQuestion: function () {
@@ -465,6 +486,17 @@
                 this.updateConnectionStatus(message.status || "connecté");
             } else if (message.type === "qa_answer") {
                 this.showSecurityMessage("Réponse Pepper", message.answer || "Réponse vide");
+            } else if (message.type === "voice_status") {
+                var status = String(message.status || "").toLowerCase();
+                var msg = message.message || "";
+                var title = message.title || "Question vocale";
+                if (status === "listening" || status === "processing") {
+                    this.showLoading(msg || "Traitement vocal en cours...");
+                } else if (status === "timeout" || status === "error") {
+                    this.showSecurityMessage(title, msg || "Je n'ai pas bien entendu.");
+                } else if (status === "done" && AppState.currentScreen === "loading") {
+                    this.showScreen("advice");
+                }
             }
         },
 
