@@ -48,7 +48,7 @@
         })(),
         // 0 => pas de timeout côté tablette (le backend pilote la durée).
         scanTimeout: Math.max(0, getNumberFromQuery("scan_timeout_ms", 0)),
-        voiceListenDurationS: Math.max(3, getNumberFromQuery("voice_duration_s", 12)),
+        voiceListenDurationS: Math.max(3, getNumberFromQuery("voice_duration_s", 60)),
         placeholderImage: "placeholder.png",
         debug: true
     };
@@ -60,6 +60,7 @@
         products: [],
         filteredProducts: [],
         top3Results: [],
+        voiceRecording: false,
         productLockedUntil: 0
     };
 
@@ -193,6 +194,38 @@
             this.showScreen("loading");
         },
 
+        setVoiceRecordingState: function (recording) {
+            AppState.voiceRecording = !!recording;
+            var startIds = ["voice-start-btn", "product-voice-start-btn"];
+            var sendIds = ["voice-send-btn", "product-voice-send-btn"];
+            var i;
+            for (i = 0; i < startIds.length; i += 1) {
+                var startBtn = byId(startIds[i]);
+                if (startBtn) {
+                    startBtn.style.display = recording ? "none" : "";
+                }
+            }
+            for (i = 0; i < sendIds.length; i += 1) {
+                var sendBtn = byId(sendIds[i]);
+                if (sendBtn) {
+                    sendBtn.style.display = recording ? "" : "none";
+                }
+            }
+        },
+
+        updateVoiceTranscriptPreview: function (text) {
+            var value = String(text || "").trim();
+            var msg = value ? ("Transcription: " + value) : "";
+            var ids = ["voice-transcript-preview", "product-voice-transcript-preview"];
+            var i;
+            for (i = 0; i < ids.length; i += 1) {
+                var el = byId(ids[i]);
+                if (el) {
+                    el.textContent = msg;
+                }
+            }
+        },
+
         showSecurityMessage: function (title, message) {
             byId("security-title").textContent = title || "Information";
             byId("security-message").textContent = message || "";
@@ -272,11 +305,24 @@
         },
 
         startVoiceQuestion: function () {
-            if (!this.sendCommand("start_voice_question", { duration_s: CONFIG.voiceListenDurationS })) {
+            if (!this.sendCommand("start_voice_question", { duration_s: CONFIG.voiceListenDurationS, manual_send: true })) {
                 this.showError("Connexion tablette indisponible.");
                 return;
             }
-            this.showLoading("Micro activé. Parlez maintenant...");
+            this.setVoiceRecordingState(true);
+            this.showLoading("Micro activé. Parlez puis appuyez sur « Envoyer la question ».");
+        },
+
+        stopVoiceQuestion: function () {
+            if (!AppState.voiceRecording) {
+                return;
+            }
+            if (!this.sendCommand("stop_voice_question", { manual_send: true })) {
+                this.showError("Connexion tablette indisponible.");
+                return;
+            }
+            this.setVoiceRecordingState(false);
+            this.showLoading("Envoi de la question en cours...");
         },
 
         askTextQuestion: function () {
@@ -497,6 +543,7 @@
             } else if (message.type === "status") {
                 this.updateConnectionStatus(message.status || "connecté");
             } else if (message.type === "qa_answer") {
+                this.updateVoiceTranscriptPreview(message.question || "");
                 this.showSecurityMessage("Réponse Pepper", message.answer || "Réponse vide");
             } else if (message.type === "voice_status") {
                 var status = String(message.status || "").toLowerCase();
@@ -504,10 +551,18 @@
                 var title = message.title || "Question vocale";
                 if (status === "listening" || status === "processing") {
                     this.showLoading(msg || "Traitement vocal en cours...");
+                    if (status === "listening") {
+                        this.setVoiceRecordingState(true);
+                    }
                 } else if (status === "timeout" || status === "error") {
+                    this.setVoiceRecordingState(false);
                     this.showSecurityMessage(title, msg || "Je n'ai pas bien entendu.");
+                } else if (status === "transcript") {
+                    this.updateVoiceTranscriptPreview(msg);
+                    this.showLoading(msg || "Transcription reçue...");
                 } else if (status === "done" && AppState.currentScreen === "loading") {
-                    this.showScreen("advice");
+                    this.setVoiceRecordingState(false);
+                    this.showScreen(AppState.currentProduct ? "product" : "advice");
                 }
             }
         },
@@ -530,6 +585,7 @@
 
             AppState.ws.onclose = function () {
                 AppState.connected = false;
+                self.setVoiceRecordingState(false);
                 self.updateConnectionStatus("Déconnecté");
                 setTimeout(function () { self.connectWebSocket(); }, 3000);
             };

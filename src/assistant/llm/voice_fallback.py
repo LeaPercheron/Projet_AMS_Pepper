@@ -81,6 +81,7 @@ class HTTPVoiceFallback:
         self._listen_until = 0.0 if self.config.manual_trigger else float("inf")
         self._manual_window_samples = []
         self._manual_window_len_s = 0.0
+        self._manual_window_lock = threading.Lock()
         self._local_stt_warned_unavailable = False
         self._local_stt_warned_model = False
         self._local_stt_path = self._resolve_local_stt_path()
@@ -99,8 +100,9 @@ class HTTPVoiceFallback:
             self._thread = None
         self._drain_queue()
         self._reset_vad_state()
-        self._manual_window_samples = []
-        self._manual_window_len_s = 0.0
+        with self._manual_window_lock:
+            self._manual_window_samples = []
+            self._manual_window_len_s = 0.0
 
     def ingest(self, audio_bytes: bytes):
         if not audio_bytes or self._stop_event.is_set():
@@ -120,13 +122,24 @@ class HTTPVoiceFallback:
         if not self.config.manual_trigger:
             return
         window = float(duration_s or self.config.listen_window_s)
-        self._listen_until = time.time() + max(0.5, window)
+        with self._manual_window_lock:
+            self._listen_until = time.time() + max(0.5, window)
+            # Ignore la phrase robot "Je vous écoute" juste après le clic.
+            self._mute_until = time.time() + 1.0
+            self._manual_window_samples = []
+            self._manual_window_len_s = 0.0
         # Ignore la phrase robot "Je vous écoute" juste après le clic.
-        self._mute_until = time.time() + 1.0
         self._reset_vad_state()
-        self._manual_window_samples = []
-        self._manual_window_len_s = 0.0
         self._drain_queue(max_items=128)
+
+    def finalize_listen_window(self):
+        # Force la fin de fenêtre manuelle et déclenche l'analyse immédiatement.
+        if not self.config.manual_trigger:
+            return
+        with self._manual_window_lock:
+            self._listen_until = 0.0
+            self._mute_until = 0.0
+        self._finalize_manual_window()
 
     def is_listen_window_open(self) -> bool:
         if not self.config.manual_trigger:
@@ -152,11 +165,14 @@ class HTTPVoiceFallback:
                 mono_i16 = self._to_mono_i16(chunk)
                 if mono_i16.size == 0:
                     continue
-                self._manual_window_samples.append(mono_i16)
-                self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+                current_len_s = 0.0
+                with self._manual_window_lock:
+                    self._manual_window_samples.append(mono_i16)
+                    self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+                    current_len_s = self._manual_window_len_s
 
                 # Sécurité: si l'utilisateur parle très longtemps, on force un flush.
-                if self._manual_window_len_s >= self.config.max_utterance_s:
+                if current_len_s >= self.config.max_utterance_s:
                     self._finalize_manual_window()
                 continue
 
@@ -211,12 +227,15 @@ class HTTPVoiceFallback:
         self._finalize_samples(samples, utterance_s)
 
     def _finalize_manual_window(self):
-        if not self._manual_window_samples:
+        with self._manual_window_lock:
+            if not self._manual_window_samples:
+                return
+            utterance_s = self._manual_window_len_s
+            samples = self._concat_samples(self._manual_window_samples)
+            self._manual_window_samples = []
+            self._manual_window_len_s = 0.0
+        if samples.size == 0:
             return
-        utterance_s = self._manual_window_len_s
-        samples = self._concat_samples(self._manual_window_samples)
-        self._manual_window_samples = []
-        self._manual_window_len_s = 0.0
         self._finalize_samples(samples, utterance_s)
 
     def _finalize_samples(self, samples: np.ndarray, utterance_s: float):

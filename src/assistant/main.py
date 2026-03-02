@@ -466,6 +466,14 @@ class PepperAssistant:
                     "Question vocale",
                 ),
             )
+            self.openai_client.on(
+                "on_transcript",
+                lambda text: self._push_voice_status_threadsafe(
+                    "transcript",
+                    f"Transcription: {str(text or '').strip()}",
+                    "Question vocale",
+                ),
+            )
             self._realtime_tablet_callbacks_registered = True
         except Exception as e:
             self.logger.log_warning(f"  Realtime UI callbacks non initialisés: {e}")
@@ -519,6 +527,14 @@ class PepperAssistant:
         if not transcript:
             return
         self._voice_transcript_seq += 1
+        text = str(transcript or "").strip()
+        if text:
+            preview = text if len(text) <= 180 else (text[:177] + "...")
+            self._push_voice_status_threadsafe(
+                "transcript",
+                f"Transcription: {preview}",
+                "Question vocale",
+            )
         self._push_voice_status_threadsafe(
             "processing",
             "Question reçue. Je prépare la réponse...",
@@ -564,13 +580,14 @@ class PepperAssistant:
             self.tablet_server.register_handler("start_barcode_scan", self._handle_tablet_start_barcode_scan)
             self.tablet_server.register_handler("confirm_product", self._handle_tablet_confirm_product)
             self.tablet_server.register_handler("start_voice_question", self._handle_tablet_start_voice_question)
+            self.tablet_server.register_handler("stop_voice_question", self._handle_tablet_stop_voice_question)
             if self._tablet_text_question_enabled:
                 self.logger.log_info(
-                    "  Tablette: handlers get_products/ask_question/start_visual_scan/start_barcode_scan/start_voice_question actifs"
+                    "  Tablette: handlers get_products/ask_question/start_visual_scan/start_barcode_scan/start_voice_question/stop_voice_question actifs"
                 )
             else:
                 self.logger.log_info(
-                    "  Tablette: handlers get_products/start_visual_scan/start_barcode_scan/start_voice_question actifs (ask_question désactivé)"
+                    "  Tablette: handlers get_products/start_visual_scan/start_barcode_scan/start_voice_question/stop_voice_question actifs (ask_question désactivé)"
                 )
         except Exception as e:
             self.logger.log_warning(f"  Tablette: handlers indisponibles ({e})")
@@ -1289,6 +1306,9 @@ class PepperAssistant:
 
     async def _handle_tablet_start_voice_question(self, websocket, data):
         # Déclenche une fenêtre d'écoute vocale fallback via bouton tablette.
+        payload_data = data or {}
+        manual_send = str(payload_data.get("manual_send", "1")).strip().lower() in {"1", "true", "yes", "on"}
+
         if self._is_realtime_connected():
             await self._push_voice_status(
                 status="listening",
@@ -1307,8 +1327,8 @@ class PepperAssistant:
 
         duration = float(os.getenv("PEPPER_VOICE_LISTEN_DURATION_S", "12") or 12.0)
         try:
-            requested = float((data or {}).get("duration_s", duration))
-            duration = max(3.0, min(20.0, requested))
+            requested = float(payload_data.get("duration_s", duration))
+            duration = max(3.0, min(180.0, requested))
         except Exception:
             pass
 
@@ -1340,15 +1360,62 @@ class PepperAssistant:
         self.logger.log_info(f"  Tablette: question vocale démarrée (durée={duration:.1f}s)")
         await self._push_voice_status(
             status="listening",
-            message=f"Micro activé. Parlez maintenant ({int(duration)} s).",
+            message=(
+                "Micro activé. Parlez maintenant puis appuyez sur « Envoyer la question »."
+                if manual_send else f"Micro activé. Parlez maintenant ({int(duration)} s)."
+            ),
             title="Question vocale",
             websocket=websocket,
         )
+        if not manual_send:
+            asyncio.create_task(
+                self._notify_voice_timeout_if_silent(
+                    websocket=websocket,
+                    request_id=request_id,
+                    duration_s=duration,
+                    transcript_seq_before=transcript_seq_before,
+                )
+            )
+
+    async def _handle_tablet_stop_voice_question(self, websocket, data):
+        # Arrêt manuel de la fenêtre d'écoute vocale et envoi immédiat.
+        if self._is_realtime_connected():
+            await self._push_voice_status(
+                status="processing",
+                message="Question envoyée. Je prépare la réponse...",
+                title="Question vocale",
+                websocket=websocket,
+            )
+            return
+
+        if not self.voice_fallback:
+            await self.tablet_server._send_error(
+                websocket,
+                "Fallback vocal indisponible (vérifier OpenAI et micro Pepper)."
+            )
+            return
+
+        request_id = self._voice_request_seq
+        transcript_seq_before = self._voice_transcript_seq
+
+        await self._push_voice_status(
+            status="processing",
+            message="Question envoyée. Analyse en cours...",
+            title="Question vocale",
+            websocket=websocket,
+        )
+
+        if hasattr(self.voice_fallback, "finalize_listen_window"):
+            await asyncio.to_thread(self.voice_fallback.finalize_listen_window)
+        elif hasattr(self.voice_fallback, "arm_listen_window"):
+            await asyncio.to_thread(self.voice_fallback.arm_listen_window, 0.5)
+
+        # Si aucun transcript n'arrive, notifier rapidement.
         asyncio.create_task(
             self._notify_voice_timeout_if_silent(
                 websocket=websocket,
                 request_id=request_id,
-                duration_s=duration,
+                duration_s=0.5,
                 transcript_seq_before=transcript_seq_before,
             )
         )

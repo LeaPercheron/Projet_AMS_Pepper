@@ -129,6 +129,12 @@
             </div>
 
             <div class="product-buttons">
+                <button id="product-voice-start-btn" class="secondary-btn" onclick="App.startVoiceQuestion()">
+                    🎤 Poser une question vocale
+                </button>
+                <button id="product-voice-send-btn" class="secondary-btn" style="display:none;" onclick="App.stopVoiceQuestion()">
+                    ✅ Envoyer la question
+                </button>
                 <button class="primary-btn" onclick="App.showScreen('scan-choice')">
                     Nouveau produit
                 </button>
@@ -136,6 +142,7 @@
                     ← Retour à l'accueil
                 </button>
             </div>
+            <p id="product-voice-transcript-preview" class="voice-transcript-preview"></p>
         </div>
     </div>
 
@@ -147,13 +154,17 @@
                 <h3>Question vocale</h3>
                 <p>Appuyez puis parlez à voix haute.</p>
                 <div class="product-buttons">
-                    <button class="primary-btn" onclick="App.startVoiceQuestion()">
+                    <button id="voice-start-btn" class="primary-btn" onclick="App.startVoiceQuestion()">
                         🎤 Poser une question vocale
+                    </button>
+                    <button id="voice-send-btn" class="secondary-btn" style="display:none;" onclick="App.stopVoiceQuestion()">
+                        ✅ Envoyer la question
                     </button>
                     <button id="text-question-btn" class="secondary-btn" style="display:none;" onclick="App.askTextQuestion()">
                         ⌨️ Question écrite (secours)
                     </button>
                 </div>
+                <p id="voice-transcript-preview" class="voice-transcript-preview"></p>
             </div>
 
             <div class="filter-section">
