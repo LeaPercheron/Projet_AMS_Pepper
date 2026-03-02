@@ -1,138 +1,117 @@
-# Architecture Systeme
+# Architecture Systeme (etat actuel)
 
-## Vue d'Ensemble
+## But fonctionnel
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           ROBOT PEPPER                                  │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │ 4 Mics       │     │ Camera       │     │ Speakers     │            │
-│  │ (48kHz)      │     │ (VGA)        │     │ (Stereo)     │            │
-│  └──────┬───────┘     └──────┬───────┘     └──────┬───────┘            │
-└─────────┼─────────────────────┼─────────────────────┼──────────────────┘
-          │                     │                     │
-    TCP:5555            TCP (video)             TCP:5556
-          │                     │                     │
-          └─────────────────────┼─────────────────────┘
-                                │
-                  ┌─────────────▼─────────────┐
-                  │       MAC M4 PRO          │
-                  │                           │
-        ┌─────────▼─────────┐    ┌───────────▼──────────┐
-        │ Audio Processing  │    │ Vision Module        │
-        │ • Beamforming     │    │ • VLM (Qwen2-VL)     │
-        │ • Noise reduction │    │ • Barcode (pyzbar)   │
-        │ • AGC             │    │                      │
-        │ • Resample 24kHz  │    │                      │
-        └────────┬──────────┘    └────────┬─────────────┘
-                 │                        │
-        ┌────────▼────────────────────────▼──────────┐
-        │ OpenAI Realtime API (WebSocket)            │
-        │ • GPT-4o-realtime                          │
-        │ • VAD detection                            │
-        │ • Streaming audio + transcription          │
-        └────────┬──────────────────────────┬────────┘
-                 │                          │
-        ┌────────▼────────┐       ┌────────▼────────┐
-        │ Safety Module   │       │ Database        │
-        │ • Keywords      │       │ • SQLite        │
-        │ • EAN blacklist │       │ • 30+ products  │
-        └────────┬────────┘       └────────┬────────┘
-                 │                          │
-        ┌────────▼──────────────────────────▼────────┐
-        │            Orchestrator                    │
-        │        (State Machine - 11 etats)          │
-        └────────┬──────────────────────────┬────────┘
-                 │                          │
-        ┌────────▼────────┐       ┌────────▼────────┐
-        │ Tablet UI       │       │ LED Control     │
-        │ • WebSocket     │       │ • Per-state     │
-        │ • 7 screens     │       │ • Fade effect   │
-        └─────────────────┘       └─────────────────┘
-```
+Le systeme pilote un assistant Pepper pour les shampooings:
+- identification produit par scan visuel ou code-barres
+- affichage fiche produit sur tablette
+- questions vocales avec reponse vocale Pepper
+- recommandations produits en mode question generale
 
-## Modules
+## Composants
 
-### adapters/
-Interface hardware avec abstraction Pepper/Mock.
-- `base.py`: Interface abstraite RobotAdapter
-- `pepper_adapter.py`: Implementation Pepper (NAOqi)
-- `mock_adapter.py`: Simulation pour tests
+### Runtime principal
+- `src/assistant/main.py`
+  - initialise les modules
+  - expose les handlers tablette
+  - coordonne scan, voix, tablette et contexte
 
-### audio/
-Pipeline de traitement audio.
-- `processing.py`: Beamforming, AGC, reduction bruit
-- `half_duplex.py`: Gestion anti-feedback
-- `vad_config.py`: Presets VAD
-- `capture.py`: Capture depuis Pepper
+### Adaptateurs robot
+- `src/assistant/adapters/pepper_adapter.py`
+  - NAOqi direct (services camera/audio/tts/tablette/led)
+- `src/assistant/adapters/ssh_bridge_adapter.py`
+  - fallback si `qi` indisponible localement
+- `src/assistant/adapters/mock_adapter.py`
+  - simulation sans robot
 
-### realtime/
-Client OpenAI Realtime API.
-- `client.py`: WebSocket bidirectionnel
-- Streaming audio/transcription
-- Instructions parapharmacie
+### Vision
+- `src/assistant/vision/vision_module.py`
+  - VLM (MLX local)
+  - detection barcode (`pyzbar`)
+  - arbitrage confiance (high/medium/low)
 
-### vision/
-Identification produits.
-- `vision_module.py`: VLM + detection code-barres
-- Seuils de confiance configurable
-- Top-3 avec arbitrage
+### Voix
+- `src/assistant/llm/voice_fallback.py`
+  - buffering audio micro Pepper
+  - transcription HTTP (`whisper-1`) + fallback local
+  - reponse texte + callback TTS Pepper
 
-### database/
-Gestion produits capillaires.
-- `database_module.py`: CRUD SQLite
-- 30+ produits, 100+ blacklist
-- Recherche fuzzy
+### Donnees
+- `src/assistant/database/database_module.py`
+  - SQLite produits (`data/products.db`)
+  - lookup EAN + recherche fuzzy
 
-### safety/
-Filtres de securite.
-- `security_module.py`: Detection termes medicaux
-- Blacklist EAN medicaments
-- Reponses pre-generees
+### UI tablette
+- `tablet/index.html`
+- `tablet/app_legacy_ui.js` (script charge en production Pepper)
+- `tablet/styles.css`
+- `tablet/server.py` (serveur WS)
 
-### orchestrator/
-Machine a etats centrale.
-- `orchestrator.py`: 11 etats, 20+ evenements
-- Coordination tous modules
-- Gestion timeouts
+### Orchestrateur metier
+- `src/assistant/orchestrator/orchestrator.py`
+  - state machine d'interaction
+  - contexte conversation/produit
 
-## Flux de Donnees
+## Flux principaux
 
-### Conversation Client
+### Flux scan visuel
+1. tablette -> `start_visual_scan`
+2. backend capture frames camera
+3. VLM identifie ou demande confirmation Top-3
+4. si echec VLM -> fallback scan code-barres
+5. backend pousse resultat tablette + feedback vocal Pepper
 
-```
-1. Client detecte → GREETING
-2. Intent reconnu → AWAITING_INTENT
-3. Produit montre → SCANNING_PRODUCT
-4. VLM analyse → CONFIRMING_TOP3 ou DISPLAYING_INFO
-5. Questions → CONVERSING (avec securite)
-6. Fin → ENDING → IDLE
-```
+### Flux scan code-barres
+1. tablette -> `start_barcode_scan`
+2. backend capture burst images
+3. decode barcode -> EAN
+4. lookup DB par EAN
+5. envoi fiche produit a la tablette
 
-### Traitement Audio
+### Flux question vocale (fallback HTTP)
+1. tablette -> `start_voice_question`
+2. utilisateur parle
+3. tablette -> `stop_voice_question`
+4. transcription audio
+5. requete texte OpenAI
+6. Pepper parle la reponse
+7. tablette affiche reponse (et recommandations en mode general)
 
-```
-Pepper 4ch 48kHz → TCP → Beamforming → Noise → AGC → 24kHz → OpenAI
-OpenAI → 24kHz mono → 48kHz stereo → TCP → Pepper speakers
-```
+## Protocoles I/O
 
-### Identification Produit
+### Tablette -> backend
+- `get_products`
+- `start_visual_scan`
+- `start_barcode_scan`
+- `confirm_product`
+- `start_voice_question`
+- `stop_voice_question`
+- `ask_question` (secours texte, desactive par defaut)
 
-```
-Camera → 3 frames → VLM classification → VLM identification
-                 → Barcode detection
-Decision: High (>85%) → Direct | Medium (60-85%) → Top-3 | Low → Fallback
-```
+### Backend -> tablette
+- `show_screen`
+- `product_identified`
+- `top3_results`
+- `barcode_detected`
+- `barcode_failed`
+- `voice_status`
+- `qa_answer`
+- `security_alert`
+- `error`
 
-## Technologies
+## Resilience
 
-| Composant | Technologie |
-|-----------|-------------|
-| Robot | Pepper (NAOqi SDK) |
-| Traitement | Mac M4 Pro |
-| VLM | mlx-vlm (Qwen2-VL-2B-4bit) |
-| Audio | NumPy, SciPy |
-| API vocale | OpenAI Realtime |
-| Base donnees | SQLite |
-| UI tablette | HTML/JS + WebSocket |
-| Orchestration | Python asyncio |
+- VLM indisponible -> barcode prioritaire
+- Realtime indisponible -> HTTP fallback vocal
+- anti double-clic scan cote tablette (`scanInProgress`)
+- lock temporaire fiche produit pour ignorer ecrasements UI tardifs
+
+## Reseau cible
+
+- Mac (assistant + HTTP tablette + WS tablette)
+- Pepper (NAOqi + WebView tablette)
+- OpenAI/HuggingFace (si online)
+
+Condition cle:
+- Pepper doit pouvoir joindre l'URL `tablet-url` fournie a `assistant.main`.
+

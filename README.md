@@ -1,182 +1,205 @@
-# Parapharma Assistant
+# Projet AMS Pepper - Assistant Parapharmacie
 
-Assistant vocal pour robot Pepper specialise dans les produits capillaires en parapharmacie.
+Assistant conversationnel pour robot Pepper, specialise sur les produits capillaires (shampooings):
+- scan produit (visuel VLM) et scan code-barres (EAN)
+- fiche produit sur tablette
+- questions vocales au robot + reponse vocale
+- mode "question generale" avec recommandations de produits
 
-## Apercu
+Ce README decrit l'etat actuel du code et les commandes reelles pour lancer le projet.
 
-Ce projet implemente un assistant conversationnel sur robot Pepper permettant aux clients de:
-- Identifier des produits capillaires par vision (VLM) ou code-barres
-- Obtenir des informations (prix, usage, ingredients)
-- Poser des questions via dialogue vocal naturel
+## 1) Etat actuel du projet
 
-**Securite integree**: L'assistant refuse les conseils medicaux et detecte les medicaments.
+### Fonctionnel aujourd'hui
+- Interface tablette Pepper (`tablet/index.html`)
+- WebSocket tablette <-> backend Python
+- Scan visuel VLM (Qwen2-VL-2B-Instruct-4bit via MLX)
+- Fallback automatique vers scan code-barres si le visuel echoue
+- Scan code-barres via camera Pepper + pyzbar/libzbar
+- Affichage fiche produit (image locale, marque, usage, type cheveux)
+- Question vocale depuis tablette
+- Reponse vocale Pepper (fallback HTTP OpenAI)
+- Question generale: reponse + cartes produits recommandes
 
-## Demarrage Rapide
+### Points importants
+- Le vrai ecran principal est `tablet/index.html`.
+- `index.html` charge `tablet/app_legacy_ui.js` (choix de compatibilite WebView Pepper).
+- Par defaut, le mode question ecrite secours est desactive (`TABLET_TEXT_QUESTION_ENABLED=0`).
+- Les timeouts cote tablette sont desactives par defaut (`scan_timeout_ms=0`).
 
-### 1. Installation
+## 2) Architecture resumee
+
+Flux principal:
+1. Tablette envoie une commande (`start_visual_scan`, `start_barcode_scan`, `start_voice_question`, etc.)
+2. `assistant.main` traite la commande
+3. Pepper capture camera/micro via adaptateur
+4. Vision/LLM renvoient un resultat
+5. Backend pousse l'etat et le resultat a la tablette
+6. Pepper annonce vocalement les etapes et la reponse
+
+Dossiers principaux:
+- `src/assistant/main.py`: orchestration globale
+- `src/assistant/adapters/`: Pepper/SSH bridge/mock
+- `src/assistant/vision/`: VLM + barcode
+- `src/assistant/database/`: base SQLite produits
+- `tablet/`: UI web tablette + serveur WS
+- `scripts/pepper/`: diagnostics et preflight
+
+## 3) Prerequis
+
+- macOS + Python 3.10+
+- Robot Pepper (NAOqi) pour mode reel
+- Cle OpenAI (`OPENAI_API_KEY`) pour voix/question
+- Pour scan barcode: `pyzbar` + `libzbar`
+- Pour VLM local (Apple Silicon): `mlx`, `mlx-vlm`
+
+## 4) Installation
+
+Depuis la racine du projet:
 
 ```bash
-# Cloner le projet
-git clone <repository>
-cd Projet_AMS_Pepper
-
-# Creer environnement virtuel
-python3 -m venv venv
-source venv/bin/activate
-
-# Installer les dependances
-pip install -e .
-
-# Ou avec extras (VLM + dev)
-pip install -e ".[all]"
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
 ```
 
-### 2. Configuration
+Option VLM local:
 
 ```bash
-# Copier le fichier exemple
+python3 -m pip install -e ".[vlm]"
+```
+
+Option utile pour compat tokenizer MLX:
+
+```bash
+python3 -m pip install -U "mistral-common[image,hf-hub]>=1.8.8"
+```
+
+## 5) Configuration
+
+```bash
 cp .env.example .env
-
-# Editer avec votre cle API OpenAI
-nano .env
 ```
+
+Variables minimales:
 
 ```env
-OPENAI_API_KEY=sk-your-api-key-here
-PEPPER_IP=192.168.1.100  # Optionnel, vide = simulation
+OPENAI_API_KEY=sk-...
+PEPPER_IP=192.168.13.213
+PEPPER_PORT=9559
+TABLET_HOST=0.0.0.0
+TABLET_PORT=8765
 ```
 
-### 3. Lancement
+Option recommandee pour forcer un bundle CA propre:
 
 ```bash
-# Mode simulation (sans robot)
-python -m assistant.main --simulation
-
-# Mode avec Pepper
-python -m assistant.main --pepper-ip 192.168.1.100
-
-# Mode Pepper sans qi local (fallback SSH)
-PEPPER_FORCE_SSH_BRIDGE=1 python -m assistant.main --pepper-ip 192.168.1.100
-
-# Mode debug
-python -m assistant.main --simulation --debug
+export PEPPER_FORCE_CERTIFI_CA=1
 ```
 
-> Note: le mode SSH bridge requiert un accès SSH sans prompt vers Pepper
-> (clé SSH recommandée) et `python`+`qi` disponibles sur le robot.
+## 6) Lancement du projet (avec Pepper)
 
-## Structure du Projet
-
-```
-parapharma-assistant/
-├── README.md                    # Ce fichier
-├── pyproject.toml               # Configuration projet Python
-├── .env.example                 # Template variables environnement
-├── config/
-│   └── config.yaml              # Configuration principale
-│
-├── src/assistant/               # Code source principal
-│   ├── main.py                  # Point d'entree
-│   ├── config.py                # Gestion configuration
-│   ├── logger.py                # Logging JSONL
-│   │
-│   ├── adapters/                # Hardware (Pepper, Mock)
-│   ├── audio/                   # Capture, traitement, VAD
-│   ├── realtime/                # Client OpenAI Realtime
-│   ├── vision/                  # VLM, code-barres
-│   ├── database/                # SQLite produits
-│   ├── safety/                  # Filtres securite
-│   └── orchestrator/            # Machine a etats
-│
-├── tablet/                      # Interface tablette (HTML/JS)
-│   ├── index.html
-│   ├── styles.css
-│   ├── app.js
-│   └── server.py
-│
-├── scripts/                     # Scripts utilitaires
-│   ├── test_audio.py
-│   ├── test_vision.py
-│   └── run_demo.py
-│
-├── tests/                       # Tests unitaires
-│
-├── data/                        # Donnees
-│   ├── products.db
-│   └── blacklist.json
-│
-└── docs/                        # Documentation
-    ├── architecture.md
-    └── phases/                  # Historique des phases
-```
-
-## Modes d'Execution
-
-| Mode | Description | Commande |
-|------|-------------|----------|
-| **Simulation** | Sans hardware, pour tests | `--simulation` |
-| **Development** | Avec Pepper, logs verbeux | (par defaut) |
-| **Production** | Deploiement final | `--production` |
-| **Test** | Timeouts courts | `--test` |
-
-## Fonctionnalites
-
-### Vision
-- Identification VLM (Qwen2-VL-2B) en ~500ms
-- Detection code-barres EAN-13
-- Confiance: Haute (>85%), Moyenne (60-85%), Basse (<60%)
-
-### Audio
-- Beamforming 4 canaux → mono
-- Reduction de bruit adaptative
-- Half-duplex (anti-feedback)
-
-### Dialogue
-- OpenAI Realtime API (GPT-4o)
-- VAD serveur avec presets
-- Reponses concises (2-3 phrases)
-
-### Securite
-- 80+ mots-cles medicaux bloques
-- Blacklist 100+ medicaments
-- 4 scenarios de securite obligatoires
-
-## Tests
+### Terminal A - servir la tablette web
 
 ```bash
-# Test module audio
-python scripts/test_audio.py
-
-# Test module vision
-python scripts/test_vision.py
-
-# Demo interactive
-python scripts/run_demo.py
+cd tablet
+python3 -m http.server 8080 --bind 0.0.0.0
 ```
 
-## Documentation
+### Terminal B - lancer l'assistant
 
-- [Architecture](docs/architecture.md) - Vue technique complete
-- [Phases](docs/phases/) - Historique du developpement:
-  - [Phase 0](docs/phases/phase0_validation.md) - Validation hardware
-  - [Phase 1](docs/phases/phase1_audio_pipeline.md) - Pipeline audio
-  - [Phase 2](docs/phases/phase2_audio_processing.md) - Traitement audio
-  - [Phase 3](docs/phases/phase3_openai_realtime.md) - OpenAI Realtime
-  - [Phase 4](docs/phases/phase4_vad_dialogue.md) - VAD et dialogue
-  - [Phase 5](docs/phases/phase5_vision.md) - Vision VLM
-  - [Phase 6](docs/phases/phase6_database.md) - Base de donnees
-  - [Phase 7](docs/phases/phase7_security.md) - Securite
-  - [Phase 9](docs/phases/phase9_orchestrator.md) - Orchestrateur
-  - [Phase 10](docs/phases/phase10_tablet.md) - Interface tablette
-  - [Phase 11](docs/phases/phase11_integration.md) - Integration
+Depuis la racine du projet:
 
-## Prerequis
+```bash
+set -a; source .env; set +a
+export OPENAI_REALTIME_DISABLED=1
+export PEPPER_FORCE_CERTIFI_CA=1
 
-- Python 3.10+
-- Mac avec Apple Silicon (M1/M2/M3/M4) pour VLM
-- Robot Pepper avec NAOqi SDK (optionnel)
-- Cle API OpenAI
+MY_IP=$(python3 - <<'PY'
+import socket
+pepper="192.168.13.213"
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect((pepper,9559))
+print(s.getsockname()[0])
+s.close()
+PY
+)
 
-## Licence
+PYTHONPATH=src python3 -m assistant.main \
+  --pepper-ip 192.168.13.213 \
+  --tablet-url "http://${MY_IP}:8080/index.html?ws=ws://${MY_IP}:8765&cb=$(date +%s)"
+```
 
-Projet academique - Master 2 AMS
+Notes reseau critiques:
+- Le Mac qui lance `assistant.main` et Pepper doivent etre routables entre eux.
+- Si `showWebview returned False`, l'URL tablette n'est pas joignable depuis Pepper.
+- Le parametre `cb=` force le refresh et evite le cache tablette.
+
+## 7) Mini projet test voix (optionnel)
+
+Le sous-projet `voice_test/` sert a isoler la boucle vocale sans scan.
+
+Doc dediee:
+- `voice_test/README.md`
+
+## 8) Diagnostics utiles
+
+Diagnostic Pepper (connectivite + tablette):
+
+```bash
+PYTHONPATH=src python3 scripts/pepper/pepper_diagnostics.py \
+  --pepper-ip 192.168.13.213 \
+  --skip-camera --skip-audio-in --skip-audio-out --skip-leds \
+  --tablet-url "http://${MY_IP}:8080/index.html"
+```
+
+Variables debug scan/camera:
+
+```bash
+export PEPPER_BARCODE_DEBUG=1
+export PEPPER_CAMERA_DEBUG=1
+export PEPPER_SCAN_KEEP_IMAGES=1
+```
+
+Dump images scan:
+- `logs/pepper_diagnostics/barcode_dump/`
+
+## 9) Problemes frequents
+
+- Tablette affichee mais boutons inactifs:
+  - verifier `ws=` dans l'URL
+  - verifier que le serveur WS tourne (`ws://<MY_IP>:8765`)
+  - forcer cache-buster `&cb=$(date +%s)`
+
+- `showWebview returned False`:
+  - URL tablette inaccessible depuis Pepper
+  - mauvais reseau, IP Mac incorrecte, firewall
+
+- VLM indisponible:
+  - verifier deps `mlx-vlm`, `mistral-common`
+  - verifier acces TLS/HuggingFace
+  - fallback barcode reste disponible
+
+- OpenAI ne repond pas:
+  - verifier `OPENAI_API_KEY`
+  - verifier TLS/certificats (`PEPPER_FORCE_CERTIFI_CA=1`)
+  - verifier reseau sortant vers `api.openai.com`
+
+## 10) Commandes courtes (rappel)
+
+Lancer tablette:
+
+```bash
+cd tablet && python3 -m http.server 8080 --bind 0.0.0.0
+```
+
+Lancer assistant:
+
+```bash
+PYTHONPATH=src python3 -m assistant.main --pepper-ip <IP_PEPPER> --tablet-url "http://<IP_MAC>:8080/index.html?ws=ws://<IP_MAC>:8765"
+```
+
+## 11) Licence
+
+Projet academique - Master 2 AMS.
