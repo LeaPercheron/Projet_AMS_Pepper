@@ -59,7 +59,8 @@
         ws: null,
         products: [],
         filteredProducts: [],
-        top3Results: []
+        top3Results: [],
+        productLockedUntil: 0
     };
 
     function byId(id) {
@@ -296,6 +297,7 @@
 
         showProduct: function (product) {
             product = product || {};
+            AppState.productLockedUntil = Date.now() + 15000;
             var img = byId("product-image");
             if (img) {
                 img.src = this.resolveImageUrl(product.image, product);
@@ -470,7 +472,17 @@
             } else if (message.type === "error") {
                 this.showError(message.message || "Erreur inconnue");
             } else if (message.type === "show_screen") {
-                this.showScreen(message.screen || "home");
+                var nextScreen = message.screen || "home";
+                if (
+                    AppState.currentScreen === "product"
+                    && Date.now() < (AppState.productLockedUntil || 0)
+                    && nextScreen !== "home"
+                    && nextScreen !== "product"
+                ) {
+                    this.log("show_screen ignoré (fiche produit verrouillée):", nextScreen);
+                } else {
+                    this.showScreen(nextScreen);
+                }
             } else if (message.type === "products_list") {
                 AppState.products = (message.products || []).map(function (p) {
                     var product = p || {};

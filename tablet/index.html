@@ -219,24 +219,16 @@
     </div>
 
     <script>
-        (function () {
-            var cacheKey = String(Date.now());
-            var search = window.location.search || "";
-            var cbMatch = search.match(/[?&]cb=([^&]+)/);
-            if (cbMatch && cbMatch[1]) {
-                try {
-                    cacheKey = decodeURIComponent(cbMatch[1]);
-                } catch (e) {}
-            }
-
-            // Par défaut: UI compat Pepper (stable sur webview NAOqi).
-            // Pour forcer l'UI moderne: ajouter ?ui=modern.
-            var useModernUi = /(?:[?&])ui=modern(?:&|$)/.test(search);
-            var script = document.createElement("script");
-            script.src = (useModernUi ? "app.js" : "app_legacy_ui.js")
-                + "?v=" + encodeURIComponent(cacheKey);
-            document.body.appendChild(script);
-        })();
+        // Affiche les erreurs JS directement sur l'écran d'accueil Pepper.
+        window.onerror = function (msg) {
+            try {
+                var status = document.getElementById("ws-status");
+                if (status) {
+                    status.textContent = "Erreur JavaScript: " + msg;
+                }
+            } catch (e) {}
+        };
     </script>
+    <script src="app_legacy_ui.js"></script>
 </body>
 </html>

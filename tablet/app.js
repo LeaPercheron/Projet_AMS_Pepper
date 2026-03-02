@@ -58,7 +58,8 @@ const AppState = {
     filteredProducts: [],
     currentProduct: null,
     top3Results: [],
-    currentFilter: 'all'
+    currentFilter: 'all',
+    productLockedUntil: 0
 };
 
 const App = {
@@ -312,6 +313,7 @@ const App = {
         this.log('Affichage produit', product);
 
         AppState.currentProduct = product;
+        AppState.productLockedUntil = Date.now() + 15000;
 
         const image = document.getElementById('product-image');
         image.src = this.resolveImageUrl(product.image, product);
@@ -527,7 +529,19 @@ const App = {
                     break;
 
                 case 'show_screen':
-                    this.showScreen(message.screen);
+                    {
+                        const nextScreen = message.screen || 'home';
+                        if (
+                            AppState.currentScreen === 'product'
+                            && Date.now() < (AppState.productLockedUntil || 0)
+                            && nextScreen !== 'home'
+                            && nextScreen !== 'product'
+                        ) {
+                            this.log('show_screen ignoré (fiche produit verrouillée):', nextScreen);
+                        } else {
+                            this.showScreen(nextScreen);
+                        }
+                    }
                     break;
 
                 case 'products_list':
