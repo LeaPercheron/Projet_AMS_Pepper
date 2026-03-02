@@ -1377,7 +1377,13 @@ class PepperAssistant:
 
     def _resolve_local_ip_for_pepper(self) -> str:
         # Déduit l'IP locale utile pour joindre Pepper.
-        pepper_ip = (self.config.pepper.ip or "").strip()
+        pepper_ip = ""
+        try:
+            pepper_ip = str(getattr(self.adapter, "ip", "") or "").strip()
+        except Exception:
+            pepper_ip = ""
+        if not pepper_ip:
+            pepper_ip = (self.config.pepper.ip or "").strip()
         if not pepper_ip:
             return "127.0.0.1"
         try:
@@ -1427,6 +1433,11 @@ class PepperAssistant:
         try:
             pepper_ip = str(getattr(self.adapter, "ip", "") or "")
             tablet_host = (urlparse(url).hostname or "").strip()
+            if "xxx" in tablet_host.lower():
+                self.logger.log_warning(
+                    "  URL tablette invalide (placeholder détecté): "
+                    f"{tablet_host}. Remplace par une vraie IP (ex: 192.168.13.42)."
+                )
             if pepper_ip and tablet_host:
                 pepper_addr = ipaddress.ip_address(pepper_ip)
                 tablet_addr = ipaddress.ip_address(tablet_host)

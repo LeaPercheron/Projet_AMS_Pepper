@@ -10,7 +10,7 @@ import audioop
 import os
 import base64
 import ipaddress
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from typing import Optional, Callable, List
 from .base import RobotAdapter, AdapterConfig, LEDColor
 
@@ -825,6 +825,20 @@ class PepperAdapter(RobotAdapter):
         except Exception:
             return False
 
+    @staticmethod
+    def _without_ws_query(url: str) -> str:
+        # Retire seulement le paramètre ws=... de l'URL.
+        try:
+            parsed = urlparse(url or "")
+            if not parsed.query:
+                return url
+            pairs = parse_qsl(parsed.query, keep_blank_values=True)
+            filtered = [(k, v) for (k, v) in pairs if str(k).lower() != "ws"]
+            new_query = urlencode(filtered, doseq=True)
+            return urlunparse(parsed._replace(query=new_query))
+        except Exception:
+            return url
+
     def show_on_tablet(self, url: str) -> bool:
         # Affiche une URL sur la tablette.
         if not self._is_connected or not self._tablet_service:
@@ -895,7 +909,19 @@ class PepperAdapter(RobotAdapter):
                         pass
                     continue
 
-                result = self._tablet_service.showWebview(url)
+                candidates = [url]
+                sanitized = self._without_ws_query(url)
+                if sanitized and sanitized != url:
+                    candidates.append(sanitized)
+
+                result = False
+                used_url = url
+                for candidate in candidates:
+                    used_url = candidate
+                    result = self._tablet_service.showWebview(candidate)
+                    if result is not False:
+                        break
+
                 if result is False:
                     last_error = "showWebview returned False for target URL"
                     if blank_ok is True:
@@ -910,6 +936,11 @@ class PepperAdapter(RobotAdapter):
                             )
                     time.sleep(1.5)
                     continue
+                elif used_url != url:
+                    print(
+                        "[Pepper] Tablette: URL avec paramètre ws refusée, "
+                        "fallback sans ws utilisé."
+                    )
 
                 try:
                     if hasattr(self._tablet_service, "reloadPage"):

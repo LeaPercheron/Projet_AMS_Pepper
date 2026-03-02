@@ -407,7 +407,9 @@ def test_tablet(session, url: str, display_s: float = 5.0) -> TestResult:
         # Execute l'action.
         tablet = session.service("ALTabletService")
         print(f"[TABLET] Affichage {url}")
-        tablet.showWebview(url)
+        ok = tablet.showWebview(url)
+        if ok is False:
+            raise RuntimeError("ALTabletService.showWebview returned False")
         time.sleep(display_s)
         tablet.hideWebview()
         print("[TABLET] OK")

@@ -220,29 +220,22 @@
 
     <script>
         (function () {
-            var supportsModernJs = true;
             var cacheKey = String(Date.now());
-            try {
-                var cb = new URLSearchParams(window.location.search).get("cb");
-                if (cb) {
-                    cacheKey = cb;
-                }
-            } catch (e) {}
-            try {
-                eval("const a = 1; let b = 2; (() => a + b)(); var t = `ok`; t;");
-            } catch (e) {
-                supportsModernJs = false;
+            var search = window.location.search || "";
+            var cbMatch = search.match(/[?&]cb=([^&]+)/);
+            if (cbMatch && cbMatch[1]) {
+                try {
+                    cacheKey = decodeURIComponent(cbMatch[1]);
+                } catch (e) {}
             }
 
-            if (!supportsModernJs) {
-                var compatScript = document.createElement("script");
-                compatScript.src = "app_legacy_ui.js?v=" + encodeURIComponent(cacheKey);
-                document.body.appendChild(compatScript);
-            } else {
-                var script = document.createElement("script");
-                script.src = "app.js?v=" + encodeURIComponent(cacheKey);
-                document.body.appendChild(script);
-            }
+            // Par défaut: UI compat Pepper (stable sur webview NAOqi).
+            // Pour forcer l'UI moderne: ajouter ?ui=modern.
+            var useModernUi = /(?:[?&])ui=modern(?:&|$)/.test(search);
+            var script = document.createElement("script");
+            script.src = (useModernUi ? "app.js" : "app_legacy_ui.js")
+                + "?v=" + encodeURIComponent(cacheKey);
+            document.body.appendChild(script);
         })();
     </script>
 </body>
