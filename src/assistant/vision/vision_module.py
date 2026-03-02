@@ -7,6 +7,10 @@ import time
 import asyncio
 import tempfile
 import struct
+import subprocess
+import platform
+import base64
+import re
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Tuple, Union
@@ -525,6 +529,15 @@ class VLMModule:
         self.config = None
         self.is_loaded = False
         self._load_time_ms = 0
+        self._backend = "none"  # none | mlx | openai
+        self._openai_client = None
+        self._openai_model = (
+            os.getenv("OPENAI_VISION_MODEL", "").strip() or "gpt-4o-mini"
+        )
+        self._openai_fallback_enabled = (
+            os.getenv("OPENAI_VISION_FALLBACK_ENABLED", "1").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
 
         # Base de produits pour matching
         self.product_database = product_database or {}
@@ -571,10 +584,78 @@ class VLMModule:
         snapshot_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return str(snapshot_dirs[0])
 
+    @staticmethod
+    def _mlx_healthcheck() -> Tuple[bool, str]:
+        # Vérifie MLX dans un sous-processus pour éviter un crash hard du process.
+        if os.getenv("PEPPER_SKIP_MLX_HEALTHCHECK", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return True, "healthcheck ignoré"
+
+        # MLX VLM est supporté principalement sur macOS Apple Silicon.
+        if platform.system() == "Darwin" and platform.machine() != "arm64":
+            return False, "MLX VLM non supporté sur macOS Intel"
+
+        code = (
+            "import mlx.core as mx\n"
+            "x = mx.array([1,2,3])\n"
+            "print(int(x.sum().item()))\n"
+        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=10.0,
+                check=False,
+            )
+        except Exception as e:
+            return False, str(e)
+
+        if proc.returncode == 0:
+            return True, proc.stdout.strip() or "ok"
+
+        err = (proc.stderr or proc.stdout or "").strip()
+        if not err:
+            err = f"returncode={proc.returncode}"
+        if os.getenv("PEPPER_VLM_DEBUG", "").strip().lower() not in {"1", "true", "yes", "on"}:
+            err = err.splitlines()[0] if err.splitlines() else err
+        return False, err
+
+    def _setup_openai_fallback(self) -> bool:
+        if not self._openai_fallback_enabled:
+            return False
+        api_key = (os.getenv("OPENAI_API_KEY", "") or "").strip()
+        if not api_key:
+            return False
+        try:
+            from openai import OpenAI
+            timeout_s = float(os.getenv("OPENAI_VISION_TIMEOUT_S", "25") or 25)
+            max_retries = int(os.getenv("OPENAI_VISION_MAX_RETRIES", "1") or 1)
+            self._openai_client = OpenAI(
+                api_key=api_key,
+                timeout=timeout_s,
+                max_retries=max_retries,
+            )
+            self._backend = "openai"
+            self.is_loaded = True
+            return True
+        except Exception as e:
+            print(f"[VLM] Fallback OpenAI indisponible: {e}")
+            return False
+
     def load_model(self) -> bool:
         # Charge le modèle VLM.
         print("[VLM] Chargement du modèle...")
         start_time = time.time()
+
+        mlx_ok, mlx_msg = self._mlx_healthcheck()
+        if not mlx_ok:
+            print(f"[VLM] MLX indisponible: {mlx_msg}")
+            if self._setup_openai_fallback():
+                self._load_time_ms = (time.time() - start_time) * 1000
+                print(f"[VLM] Fallback vision OpenAI actif ({self._openai_model})")
+                return True
+            return False
 
         try:
             from mlx_vlm import load, generate
@@ -597,14 +678,23 @@ class VLMModule:
 
             self._load_time_ms = (time.time() - start_time) * 1000
             self.is_loaded = True
+            self._backend = "mlx"
             print(f"[VLM] Modèle chargé en {self._load_time_ms:.0f}ms")
             return True
 
         except ImportError as e:
             print(f"[VLM] mlx-vlm non installé: {e}")
+            if self._setup_openai_fallback():
+                self._load_time_ms = (time.time() - start_time) * 1000
+                print(f"[VLM] Fallback vision OpenAI actif ({self._openai_model})")
+                return True
             return False
         except Exception as e:
             print(f"[VLM] Erreur chargement: {e}")
+            if self._setup_openai_fallback():
+                self._load_time_ms = (time.time() - start_time) * 1000
+                print(f"[VLM] Fallback vision OpenAI actif ({self._openai_model})")
+                return True
             return False
 
     def classify_hair_product(self, image: Image.Image) -> Tuple[bool, float]:
@@ -619,20 +709,29 @@ Réponds au format:
 REPONSE: OUI ou NON
 CONFIANCE: 0-100"""
 
-        result = self._run_inference(image, prompt, max_tokens=20)
+        if self._backend == "openai":
+            result = self._run_inference_openai(image, prompt, max_tokens=40)
+        else:
+            result = self._run_inference(image, prompt, max_tokens=20)
 
         if result:
             response = result.lower()
             is_hair = "oui" in response and "non" not in response.split("oui")[0]
 
-            # Extraire confiance
+            # Extraire confiance de manière robuste (ex: "confiance 73%")
             confidence = 0.5
-            if "confiance:" in response:
+            for line in response.splitlines():
+                if "confiance" not in line:
+                    continue
+                m = re.search(r"(-?\d+(?:[.,]\d+)?)", line)
+                if not m:
+                    continue
                 try:
-                    conf_str = response.split("confiance:")[1].strip().split()[0]
-                    conf_str = conf_str.replace('%', '')
-                    confidence = float(conf_str) / 100.0
-                except:
+                    value = float(m.group(1).replace(",", "."))
+                    confidence = value / 100.0 if value > 1.0 else value
+                    confidence = max(0.0, min(1.0, confidence))
+                    break
+                except Exception:
                     pass
 
             return is_hair, confidence
@@ -671,7 +770,10 @@ TYPE: [shampooing/apres-shampooing/masque/huile/serum/autre]
 Si tu ne peux pas lire le texte, indique CONFIANCE: 0."""
 
         start_time = time.time()
-        result = self._run_inference(image, prompt, max_tokens=50)
+        if self._backend == "openai":
+            result = self._run_inference_openai(image, prompt, max_tokens=120)
+        else:
+            result = self._run_inference(image, prompt, max_tokens=50)
         inference_time = (time.time() - start_time) * 1000
 
         if result:
@@ -703,7 +805,10 @@ Réponds avec 3 propositions au format:
 3. PRODUIT: [nom] | CONFIANCE: [0-100]"""
 
         start_time = time.time()
-        result = self._run_inference(image, prompt, max_tokens=100)
+        if self._backend == "openai":
+            result = self._run_inference_openai(image, prompt, max_tokens=220)
+        else:
+            result = self._run_inference(image, prompt, max_tokens=100)
         inference_time = (time.time() - start_time) * 1000
 
         results = []
@@ -736,6 +841,95 @@ Réponds avec 3 propositions au format:
                         pass
 
         return results[:3]
+
+    @staticmethod
+    def _image_to_data_url(image: Image.Image, max_side: int = 1024, quality: int = 88) -> str:
+        # Convertit une image PIL en data URL JPEG.
+        img = image.convert("RGB")
+        w, h = img.size
+        biggest = max(w, h)
+        if biggest > max_side:
+            scale = max_side / float(biggest)
+            img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.BILINEAR)
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        payload = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{payload}"
+
+    @staticmethod
+    def _extract_text_from_openai_response(resp: Any) -> str:
+        text = getattr(resp, "output_text", "") or ""
+        if text:
+            return text.strip()
+        output = getattr(resp, "output", None) or []
+        chunks: List[str] = []
+        for item in output:
+            for content in getattr(item, "content", []) or []:
+                if getattr(content, "type", "") in {"output_text", "text"}:
+                    value = getattr(content, "text", "") or ""
+                    if value:
+                        chunks.append(value)
+        return " ".join(chunks).strip()
+
+    def _run_inference_openai(
+        self,
+        image: Image.Image,
+        prompt: str,
+        max_tokens: int = 120,
+    ) -> Optional[str]:
+        # Exécute une inférence vision via OpenAI HTTP.
+        if not self._openai_client:
+            return None
+        image_url = self._image_to_data_url(image)
+
+        # Chemin principal: Responses API.
+        try:
+            resp = self._openai_client.responses.create(
+                model=self._openai_model,
+                temperature=0.2,
+                max_output_tokens=max_tokens,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": prompt},
+                            {"type": "input_image", "image_url": image_url},
+                        ],
+                    }
+                ],
+            )
+            text = self._extract_text_from_openai_response(resp)
+            if text:
+                return text
+        except Exception as e:
+            print(f"[VLM] OpenAI Responses erreur: {e}")
+
+        # Fallback legacy: Chat Completions.
+        try:
+            resp = self._openai_client.chat.completions.create(
+                model=self._openai_model,
+                temperature=0.2,
+                max_tokens=max_tokens,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ],
+                    }
+                ],
+            )
+            choices = getattr(resp, "choices", []) or []
+            if choices:
+                content = getattr(choices[0].message, "content", "") or ""
+                if content:
+                    return content.strip()
+        except Exception as e:
+            print(f"[VLM] OpenAI Chat erreur: {e}")
+
+        return None
 
     def _run_inference(self, image: Image.Image, prompt: str, max_tokens: int = 50) -> Optional[str]:
         # Exécute une inférence VLM.
@@ -786,24 +980,42 @@ Réponds avec 3 propositions au format:
         for line in lines:
             line_lower = line.lower().strip()
 
-            if line_lower.startswith('produit:'):
-                product_name = line.split(':', 1)[1].strip()
+            if ('produit' in line_lower or 'product' in line_lower) and ':' in line:
+                product_name = line.split(':', 1)[1].strip().strip("-• ")
                 # Extraire marque (premier mot)
                 words = product_name.split()
                 if words:
                     brand = words[0]
 
-            elif line_lower.startswith('confiance:'):
+            elif 'confiance' in line_lower or 'confidence' in line_lower:
                 try:
-                    conf_str = line.split(':', 1)[1].strip()
-                    conf_str = conf_str.replace('%', '').strip()
-                    confidence = float(conf_str) / 100.0
+                    m = re.search(r"(-?\d+(?:[.,]\d+)?)", line)
+                    if not m:
+                        continue
+                    value = float(m.group(1).replace(",", "."))
+                    confidence = value / 100.0 if value > 1.0 else value
                     confidence = max(0.0, min(1.0, confidence))
                 except:
                     pass
 
-            elif line_lower.startswith('type:'):
+            elif ('type' in line_lower or 'categorie' in line_lower) and ':' in line:
                 product_type = line.split(':', 1)[1].strip()
+
+        # Fallback: si le modèle ne suit pas strictement le format,
+        # prendre la première ligne informative comme nom produit.
+        if not product_name:
+            for line in lines:
+                candidate = line.strip().strip("-• ")
+                if not candidate:
+                    continue
+                low = candidate.lower()
+                if any(tag in low for tag in ("confiance", "confidence", "type", "produit", "product")):
+                    continue
+                if len(candidate.split()) >= 2:
+                    product_name = candidate
+                    words = product_name.split()
+                    brand = words[0] if words else ""
+                    break
 
         return VLMResult(
             product_name=product_name,
@@ -975,8 +1187,13 @@ class VisionPipeline:
         preprocessed = self.capture.preprocess_for_vlm(best_image)
 
         is_hair_product, class_conf = self.vlm.classify_hair_product(preprocessed)
+        vlm_backend = getattr(self.vlm, "_backend", "")
+        skip_hair_classifier = (
+            os.getenv("PEPPER_VLM_SKIP_HAIR_CLASSIFIER", "0").strip().lower()
+            in {"1", "true", "yes", "on"}
+        ) or vlm_backend == "openai"
 
-        if not is_hair_product:
+        if not skip_hair_classifier and not is_hair_product:
             return IdentificationResult(
                 success=False,
                 source=IdentificationSource.FAILED,
@@ -991,23 +1208,69 @@ class VisionPipeline:
 
         # 5. Arbitrage selon confiance
         total_time = (time.time() - start_time) * 1000
+        matched_product, match_score = self._match_product_by_name_with_score(vlm_result.product_name)
+        allow_direct_high = os.getenv("PEPPER_VLM_ALLOW_DIRECT_HIGH", "0").strip().lower() in {"1", "true", "yes", "on"}
+        high_min_match = max(0.0, min(1.0, float(os.getenv("PEPPER_VLM_HIGH_MIN_MATCH", "0.72") or 0.72)))
 
-        # Confiance >= 85% : affichage direct
+        # Confiance >= 85% : affichage direct uniquement si explicitement autorisé
+        # ET si le matching en base est solide.
         if vlm_result.confidence >= CONFIDENCE_HIGH:
-            matched_product = self._match_product_by_name(vlm_result.product_name)
+            if allow_direct_high and matched_product and match_score >= high_min_match:
+                return IdentificationResult(
+                    success=True,
+                    source=IdentificationSource.VLM_HIGH,
+                    product_id=matched_product.get("id") if matched_product else None,
+                    product_name=matched_product.get("name") if matched_product else vlm_result.product_name,
+                    brand=matched_product.get("brand") if matched_product else vlm_result.brand,
+                    confidence=min(vlm_result.confidence, match_score),
+                    vlm_result=vlm_result,
+                    barcode_result=barcode_result,
+                    total_time_ms=total_time,
+                    vlm_time_ms=vlm_time,
+                    barcode_time_ms=barcode_time,
+                    message=(
+                        f"J'ai identifié {matched_product.get('brand')} {matched_product.get('name')} "
+                        f"avec une confiance de {min(vlm_result.confidence, match_score)*100:.0f}%"
+                    ),
+                )
+            # Par défaut, un vlm_high devient une proposition à confirmer.
+            # On évite les faux positifs "très confiants" sur image ambiguë.
+            top3 = self.vlm.identify_with_top3(preprocessed)
+            candidates = []
+            for vlm_r in top3:
+                matched, score = self._match_product_by_name_with_score(vlm_r.product_name)
+                candidates.append(ProductCandidate(
+                    product_id=matched.get("id") if matched else "",
+                    name=(matched.get("name") if matched else vlm_r.product_name),
+                    brand=(matched.get("brand") if matched else vlm_r.brand),
+                    score=max(0.0, min(1.0, min(vlm_r.confidence, score if score > 0 else vlm_r.confidence))),
+                    source="vlm"
+                ))
+            if not candidates:
+                candidates.append(ProductCandidate(
+                    product_id=matched_product.get("id") if matched_product else "",
+                    name=(matched_product.get("name") if matched_product else vlm_result.product_name),
+                    brand=(matched_product.get("brand") if matched_product else vlm_result.brand),
+                    score=max(0.0, min(1.0, min(vlm_result.confidence, match_score if match_score > 0 else 0.6))),
+                    source="vlm"
+                ))
             return IdentificationResult(
                 success=True,
-                source=IdentificationSource.VLM_HIGH,
+                source=IdentificationSource.VLM_MEDIUM,
                 product_id=matched_product.get("id") if matched_product else None,
-                product_name=vlm_result.product_name,
-                brand=vlm_result.brand,
-                confidence=vlm_result.confidence,
+                product_name=(matched_product.get("name") if matched_product else vlm_result.product_name),
+                brand=(matched_product.get("brand") if matched_product else vlm_result.brand),
+                confidence=max(0.0, min(1.0, min(vlm_result.confidence, match_score if match_score > 0 else 0.7))),
+                candidates=candidates[:3],
                 vlm_result=vlm_result,
                 barcode_result=barcode_result,
                 total_time_ms=total_time,
                 vlm_time_ms=vlm_time,
                 barcode_time_ms=barcode_time,
-                message=f"J'ai identifié {vlm_result.product_name} avec une confiance de {vlm_result.confidence*100:.0f}%"
+                message=(
+                    "J'ai une proposition visuelle, mais je préfère une confirmation. "
+                    "Choisis le bon produit ou passe au code-barres."
+                ),
             )
 
         # Confiance 60-85% : Top-3 avec confirmation
@@ -1016,21 +1279,21 @@ class VisionPipeline:
             candidates = []
 
             for vlm_r in top3:
-                matched = self._match_product_by_name(vlm_r.product_name)
+                matched, score = self._match_product_by_name_with_score(vlm_r.product_name)
                 candidates.append(ProductCandidate(
                     product_id=matched.get("id") if matched else "",
-                    name=vlm_r.product_name,
-                    brand=vlm_r.brand,
-                    score=vlm_r.confidence,
+                    name=(matched.get("name") if matched else vlm_r.product_name),
+                    brand=(matched.get("brand") if matched else vlm_r.brand),
+                    score=max(0.0, min(1.0, min(vlm_r.confidence, score if score > 0 else vlm_r.confidence))),
                     source="vlm"
                 ))
 
             return IdentificationResult(
                 success=True,
                 source=IdentificationSource.VLM_MEDIUM,
-                product_name=vlm_result.product_name,
-                brand=vlm_result.brand,
-                confidence=vlm_result.confidence,
+                product_name=(matched_product.get("name") if matched_product else vlm_result.product_name),
+                brand=(matched_product.get("brand") if matched_product else vlm_result.brand),
+                confidence=max(0.0, min(1.0, min(vlm_result.confidence, match_score if match_score > 0 else 0.6))),
                 candidates=candidates,
                 vlm_result=vlm_result,
                 barcode_result=barcode_result,
@@ -1071,14 +1334,14 @@ class VisionPipeline:
             message="Je n'ai pas réussi à identifier ce produit. Peux-tu me montrer le code-barres ou l'étiquette plus clairement ?"
         )
 
-    def _match_product_by_name(self, name: str) -> Optional[Dict]:
-        # Trouve un produit par son nom (fuzzy matching simple).
+    def _match_product_by_name_with_score(self, name: str) -> Tuple[Optional[Dict], float]:
+        # Trouve un produit par son nom (fuzzy matching simple) et retourne le score.
         if not name:
-            return None
+            return None, 0.0
 
         name_lower = name.lower()
         best_match = None
-        best_score = 0
+        best_score = 0.0
 
         for product in self.product_database.get("products", []):
             product_name = f"{product.get('brand', '')} {product.get('name', '')}".lower()
@@ -1093,7 +1356,14 @@ class VisionPipeline:
                 best_score = score
                 best_match = product
 
-        return best_match if best_score > 0.3 else None
+        if best_score > 0.3:
+            return best_match, float(best_score)
+        return None, float(best_score)
+
+    def _match_product_by_name(self, name: str) -> Optional[Dict]:
+        # Compat: garde l'ancienne API.
+        match, _ = self._match_product_by_name_with_score(name)
+        return match
 
     def identify_from_paths(self, image_paths: List[str]) -> IdentificationResult:
         # Identifie à partir de chemins d'images.

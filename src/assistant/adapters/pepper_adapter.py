@@ -9,6 +9,8 @@ import wave
 import audioop
 import os
 import base64
+import ipaddress
+from urllib.parse import urlparse
 from typing import Optional, Callable, List
 from .base import RobotAdapter, AdapterConfig, LEDColor
 
@@ -816,12 +818,23 @@ class PepperAdapter(RobotAdapter):
 
     # TABLETTE
 
+    @staticmethod
+    def _is_private_ip(host: str) -> bool:
+        try:
+            return ipaddress.ip_address(host).is_private
+        except Exception:
+            return False
+
     def show_on_tablet(self, url: str) -> bool:
         # Affiche une URL sur la tablette.
         if not self._is_connected or not self._tablet_service:
             return False
 
         last_error = None
+        parsed = urlparse(url or "")
+        target_host = parsed.hostname or ""
+        target_is_private_ip = self._is_private_ip(target_host)
+        url_issue_hint = ""
         for attempt in range(1, 4):
             try:
                 # Après resetTablet, le service peut être présent mais pas prêt.
@@ -863,9 +876,38 @@ class PepperAdapter(RobotAdapter):
                 except Exception:
                     pass
 
+                # Test rapide de santé WebView:
+                # - si "about:blank" échoue, le souci vient de la tablette/service.
+                # - si "about:blank" passe mais l'URL cible échoue, c'est souvent un souci réseau URL->Mac.
+                blank_ok = None
+                try:
+                    blank_ok = bool(self._tablet_service.showWebview("about:blank"))
+                except Exception:
+                    blank_ok = None
+                if blank_ok is False:
+                    last_error = "tablet webview unavailable (about:blank returned False)"
+                    # Tentative de reset tablette avant de réessayer.
+                    try:
+                        if hasattr(self._tablet_service, "resetTablet"):
+                            self._tablet_service.resetTablet()
+                            time.sleep(6.0)
+                    except Exception:
+                        pass
+                    continue
+
                 result = self._tablet_service.showWebview(url)
                 if result is False:
-                    last_error = "showWebview returned False"
+                    last_error = "showWebview returned False for target URL"
+                    if blank_ok is True:
+                        if target_is_private_ip:
+                            url_issue_hint = (
+                                f"URL cible inaccessible depuis Pepper: {target_host}. "
+                                "Vérifie que Pepper et ton Mac sont sur le meme réseau IP."
+                            )
+                        else:
+                            url_issue_hint = (
+                                "URL cible inaccessible depuis Pepper (DNS/route/firewall)."
+                            )
                     time.sleep(1.5)
                     continue
 
@@ -882,10 +924,19 @@ class PepperAdapter(RobotAdapter):
                 return True
             except Exception as e:
                 last_error = e
+                # Tentative de recovery service tablette en cas d'exception NAOqi.
+                try:
+                    if hasattr(self._tablet_service, "resetTablet"):
+                        self._tablet_service.resetTablet()
+                        time.sleep(6.0)
+                except Exception:
+                    pass
                 time.sleep(1.5)
 
         if last_error is not None:
             print(f"[Pepper] Erreur tablette: {last_error}")
+            if url_issue_hint:
+                print(f"[Pepper] Diagnostic tablette: {url_issue_hint}")
         return False
 
     def hide_tablet(self):

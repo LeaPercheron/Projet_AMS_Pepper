@@ -255,6 +255,8 @@ class OpenAIRealtimeClient:
         # Event loop
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
+        self._base_instructions: str = self.config.instructions or ""
+        self._product_context_note: str = ""
 
     # Callbacks
 
@@ -418,12 +420,19 @@ class OpenAIRealtimeClient:
             }
         }
 
-        # Ajouter instructions si présentes
-        if self.config.instructions:
-            session_config["session"]["instructions"] = self.config.instructions
+        instructions = self._build_effective_instructions()
+        if instructions:
+            session_config["session"]["instructions"] = instructions
 
         await self._ws.send(json.dumps(session_config))
         logger.info("Session configurée")
+
+    def _build_effective_instructions(self) -> str:
+        base = (self._base_instructions or "").strip()
+        note = (self._product_context_note or "").strip()
+        if base and note:
+            return f"{base}\n\n{note}"
+        return base or note
 
     async def _handle_reconnect(self):
         # Gère la reconnexion automatique.
@@ -523,6 +532,35 @@ class OpenAIRealtimeClient:
             return
 
         message = {"type": "response.cancel"}
+        asyncio.run_coroutine_threadsafe(
+            self._send_queue.put(message),
+            self._loop
+        )
+
+    def set_product_context(self, product_name: str = "", ean: str = ""):
+        # Met à jour le contexte produit injecté dans les instructions de session.
+        name = (product_name or "").strip()
+        code = (ean or "").strip()
+        if name or code:
+            parts = []
+            if name:
+                parts.append(f"Produit actuellement identifié: {name}.")
+            if code:
+                parts.append(f"EAN actuel: {code}.")
+            parts.append("Quand l'utilisateur dit 'ce produit', il s'agit de ce produit.")
+            self._product_context_note = "CONTEXTE PRODUIT:\n" + "\n".join(parts)
+        else:
+            self._product_context_note = ""
+
+        if self.connection_state != ConnectionState.CONNECTED or not self._send_queue or not self._loop:
+            return
+
+        message = {
+            "type": "session.update",
+            "session": {
+                "instructions": self._build_effective_instructions()
+            }
+        }
         asyncio.run_coroutine_threadsafe(
             self._send_queue.put(message),
             self._loop

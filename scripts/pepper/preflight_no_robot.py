@@ -130,6 +130,18 @@ def check_python_deps() -> CheckResult:
     }
     missing = [k for k, v in mods.items() if not v]
     if not missing:
+        # Vérification ciblée: incompatibilité tokenizer vue avec certaines versions.
+        try:
+            from mistral_common.tokens.tokenizers import utils as tok_utils
+            if not hasattr(tok_utils, "get_one_valid_tokenizer_file"):
+                return CheckResult(
+                    "Dépendances Python",
+                    "WARN",
+                    "mistral_common incompatible (missing get_one_valid_tokenizer_file). "
+                    "Faire: pip install -U \"mistral-common[image,hf-hub]>=1.8.8\"",
+                )
+        except Exception:
+            pass
         return CheckResult("Dépendances Python", "PASS", "openai/pyzbar/mlx_vlm/mlx_whisper installés")
     return CheckResult("Dépendances Python", "WARN", f"manquants: {', '.join(missing)}")
 

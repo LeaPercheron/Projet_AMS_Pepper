@@ -1249,6 +1249,23 @@ class Orchestrator:
             "last_input": self.context.last_user_input
         }
 
+    def set_current_product_context(
+        self,
+        product_name: str = "",
+        ean: str = "",
+        product_id: str = "",
+        confidence: Optional[float] = None,
+    ):
+        # Met à jour explicitement le contexte produit (scan tablette hors state-machine).
+        self.context.current_product_name = str(product_name or "").strip()
+        self.context.current_ean = str(ean or "").strip()
+        self.context.current_product_id = str(product_id or "").strip()
+        if confidence is not None:
+            try:
+                self.context.vlm_confidence = float(confidence)
+            except Exception:
+                pass
+
 
 # TEST
 

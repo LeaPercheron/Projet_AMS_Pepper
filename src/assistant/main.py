@@ -9,6 +9,8 @@ import os
 import socket
 import urllib.request
 import time
+import ipaddress
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional, Any, Dict, List, Tuple
 
@@ -585,6 +587,34 @@ class PepperAssistant:
             image=payload.get("image", ""),
         )
 
+    def _sync_current_product_context(self, payload: Optional[Dict[str, Any]]) -> None:
+        # Synchronise le produit courant pour QA HTTP fallback + Realtime.
+        data = dict(payload or {})
+        name = str(data.get("name") or "").strip()
+        brand = str(data.get("brand") or "").strip()
+        ean = str(data.get("ean") or data.get("ean13") or "").strip()
+        product_id = str(data.get("id") or data.get("product_id") or "").strip()
+        confidence_raw = data.get("confidence")
+
+        full_name = f"{brand} {name}".strip() if brand else name
+
+        if self.orchestrator and hasattr(self.orchestrator, "set_current_product_context"):
+            try:
+                self.orchestrator.set_current_product_context(
+                    product_name=full_name,
+                    ean=ean,
+                    product_id=product_id,
+                    confidence=confidence_raw if confidence_raw is not None else None,
+                )
+            except Exception:
+                pass
+
+        if self.openai_client and hasattr(self.openai_client, "set_product_context"):
+            try:
+                self.openai_client.set_product_context(product_name=full_name, ean=ean)
+            except Exception:
+                pass
+
     async def _capture_scan_images(
         self,
         num_frames: int,
@@ -944,6 +974,7 @@ class PepperAssistant:
 
         async with self._scan_lock:
             try:
+                self._sync_current_product_context({})
                 if self.adapter and hasattr(self.adapter, "freeze_head"):
                     await asyncio.to_thread(self.adapter.freeze_head)
                 await self._set_scan_led((140, 0, 255))
@@ -958,6 +989,7 @@ class PepperAssistant:
                         websocket,
                         self._to_tablet_product(payload)
                     )
+                    self._sync_current_product_context(payload)
                 elif mode == "top3":
                     await self._set_scan_led((255, 140, 0))
                     top3 = [self._to_tablet_top3_result(item) for item in payload]
@@ -999,6 +1031,7 @@ class PepperAssistant:
         async with self._scan_lock:
             try:
                 self.logger.log_info("  Tablette: start_barcode_scan reçu")
+                self._sync_current_product_context({})
                 if self.adapter and hasattr(self.adapter, "freeze_head"):
                     await asyncio.to_thread(self.adapter.freeze_head)
                 await self._set_scan_led((255, 140, 0))
@@ -1012,6 +1045,10 @@ class PepperAssistant:
                     await self.tablet_server.send_barcode_detected(websocket, ean, product_msg)
                     if payload and payload.get("name"):
                         await self.tablet_server.send_product_identified(websocket, product_msg)
+                    if payload:
+                        self._sync_current_product_context(payload)
+                    else:
+                        self._sync_current_product_context({"ean": ean})
                     self.logger.log_info(f"  Tablette: code-barres détecté ({ean})")
                     return
 
@@ -1041,6 +1078,7 @@ class PepperAssistant:
             websocket,
             self._to_tablet_product(payload)
         )
+        self._sync_current_product_context(payload)
 
     async def _handle_tablet_get_products(self, websocket, data):
         # Retourne la liste produits pour l'écran conseil.
@@ -1382,6 +1420,28 @@ class PepperAssistant:
             ws_host = self._resolve_local_ip_for_pepper()
         self.logger.log_info(f"  URL tablette Pepper: {url}")
         self.logger.log_info(f"  WS tablette attendu: ws://{ws_host}:{ws_port}")
+
+        # Diagnostic réseau simple: si Pepper et l'hôte URL sont en IP privées
+        # mais dans des sous-réseaux différents, la tablette ne pourra souvent
+        # pas atteindre le serveur HTTP du Mac.
+        try:
+            pepper_ip = str(getattr(self.adapter, "ip", "") or "")
+            tablet_host = (urlparse(url).hostname or "").strip()
+            if pepper_ip and tablet_host:
+                pepper_addr = ipaddress.ip_address(pepper_ip)
+                tablet_addr = ipaddress.ip_address(tablet_host)
+                if (
+                    pepper_addr.is_private
+                    and tablet_addr.is_private
+                    and pepper_addr.packed[:3] != tablet_addr.packed[:3]
+                ):
+                    self.logger.log_warning(
+                        "  Réseau potentiellement incompatible: Pepper="
+                        f"{pepper_ip}, URL tablette={tablet_host}. "
+                        "Mets Pepper et Mac sur le meme réseau local."
+                    )
+        except Exception:
+            pass
 
         # Vérifier localement que le serveur HTTP tablette est bien lancé.
         try:
