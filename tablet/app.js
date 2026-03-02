@@ -38,10 +38,10 @@ const CONFIG = {
     })(),
     voiceListenDurationS: (() => {
         try {
-            const v = Number(new URLSearchParams(window.location.search).get('voice_duration_s') || '60');
-            return Number.isFinite(v) ? Math.max(3, v) : 60;
+            const v = Number(new URLSearchParams(window.location.search).get('voice_duration_s') || '3600');
+            return Number.isFinite(v) ? Math.max(3, v) : 3600;
         } catch (e) {
-            return 60;
+            return 3600;
         }
     })(),
     placeholderImage: 'placeholder.png',
@@ -60,6 +60,7 @@ const AppState = {
     top3Results: [],
     currentFilter: 'all',
     voiceRecording: false,
+    scanInProgress: false,
     productLockedUntil: 0
 };
 
@@ -182,6 +183,10 @@ const App = {
         this.showScreen('loading');
     },
 
+    setScanInProgress(inProgress) {
+        AppState.scanInProgress = Boolean(inProgress);
+    },
+
     setVoiceRecordingState(recording) {
         AppState.voiceRecording = Boolean(recording);
         const startButtons = ['voice-start-btn', 'product-voice-start-btn'];
@@ -210,11 +215,17 @@ const App = {
      */
     startVisualScan() {
         this.log('Démarrage scan visuel');
+        if (AppState.scanInProgress) {
+            this.log('Scan déjà en cours, action ignorée');
+            return;
+        }
+        this.setScanInProgress(true);
         this.showLoading('Analyse du produit en cours...');
 
         // Envoyer commande au serveur
         const sent = this.sendCommand('start_visual_scan');
         if (!sent) {
+            this.setScanInProgress(false);
             this.showScreen('scan-choice');
             this.showError('Connexion tablette indisponible.');
             return;
@@ -223,6 +234,7 @@ const App = {
         if (CONFIG.scanTimeout > 0) {
             setTimeout(() => {
                 if (AppState.currentScreen === 'loading') {
+                    this.setScanInProgress(false);
                     this.showScreen('scan-choice');
                     this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
                 }
@@ -235,11 +247,17 @@ const App = {
      */
     startBarcodeScan() {
         this.log('Démarrage scan code-barres');
+        if (AppState.scanInProgress) {
+            this.log('Scan déjà en cours, action ignorée');
+            return;
+        }
+        this.setScanInProgress(true);
         this.showScreen('barcode-scan');
         this.updateBarcodeStatus('waiting', 'Recherche du code-barres...');
 
         const sent = this.sendCommand('start_barcode_scan');
         if (!sent) {
+            this.setScanInProgress(false);
             this.showError('Connexion tablette indisponible.');
             return;
         }
@@ -247,6 +265,7 @@ const App = {
         if (CONFIG.scanTimeout > 0) {
             setTimeout(() => {
                 if (AppState.currentScreen === 'barcode-scan') {
+                    this.setScanInProgress(false);
                     this.updateBarcodeStatus('error', 'Le scan a pris trop de temps. Réessayez.');
                 }
             }, CONFIG.scanTimeout);
@@ -258,16 +277,18 @@ const App = {
      */
     startVoiceQuestion() {
         this.log('Démarrage question vocale fallback');
+        const useProductContext = (AppState.currentScreen === 'product' && !!AppState.currentProduct);
         const sent = this.sendCommand('start_voice_question', {
             duration_s: CONFIG.voiceListenDurationS,
-            manual_send: true
+            manual_send: true,
+            use_product_context: useProductContext
         });
         if (!sent) {
             this.showError('Connexion tablette indisponible.');
             return;
         }
         this.setVoiceRecordingState(true);
-        this.showLoading('Micro activé. Parlez puis appuyez sur « Envoyer la question ».');
+        this.updateVoiceTranscriptPreview('Micro activé. Parlez puis appuyez sur « Envoyer la question ».');
     },
 
     stopVoiceQuestion() {
@@ -305,6 +326,7 @@ const App = {
      */
     showTop3(results) {
         this.log('Affichage Top-3', results);
+        this.setScanInProgress(false);
 
         AppState.top3Results = results;
         const container = document.getElementById('top3-cards');
@@ -352,6 +374,7 @@ const App = {
      */
     showProduct(product) {
         this.log('Affichage produit', product);
+        this.setScanInProgress(false);
 
         AppState.currentProduct = product;
         AppState.productLockedUntil = Date.now() + 15000;
@@ -430,6 +453,52 @@ const App = {
         });
     },
 
+    showAdviceAnswer(question, answer, recommendations = []) {
+        const answerBox = document.getElementById('advice-answer-box');
+        const answerText = document.getElementById('advice-answer-text');
+        if (answerBox && answerText) {
+            answerText.textContent = String(answer || '').trim() || 'Réponse vide';
+            answerBox.style.display = '';
+        }
+
+        const recoSection = document.getElementById('advice-reco-section');
+        const recoGrid = document.getElementById('advice-reco-grid');
+        if (recoSection && recoGrid) {
+            recoGrid.innerHTML = '';
+            const items = Array.isArray(recommendations) ? recommendations : [];
+            if (items.length > 0) {
+                items.forEach((product) => {
+                    const p = { ...(product || {}) };
+                    if (Array.isArray(p.hair_type)) {
+                        p.hair_type = p.hair_type.join(', ');
+                    }
+                    const item = document.createElement('div');
+                    item.className = 'product-grid-item';
+                    item.onclick = () => this.showProduct(p);
+                    item.innerHTML = `
+                        <img src="${this.resolveImageUrl(p.image, p)}" alt="${p.name || 'Produit'}">
+                        <p class="name">${p.name || 'Produit'}</p>
+                        <p class="brand">${p.brand || ''}</p>
+                        <p class="price">${p.price ? p.price.toFixed(2) + ' €' : ''}</p>
+                    `;
+                    const img = item.querySelector('img');
+                    if (img) {
+                        img.onerror = () => {
+                            img.onerror = null;
+                            img.src = this.resolveImageUrl('', p);
+                        };
+                    }
+                    recoGrid.appendChild(item);
+                });
+                recoSection.style.display = '';
+            } else {
+                recoSection.style.display = 'none';
+            }
+        }
+
+        this.showScreen('advice');
+    },
+
     /**
      * Afficher un message de sécurité
      */
@@ -493,6 +562,7 @@ const App = {
                 this.log('WebSocket déconnecté');
                 AppState.connected = false;
                 this.setVoiceRecordingState(false);
+                this.setScanInProgress(false);
                 this.updateConnectionStatus('Déconnecté');
 
                 // Tentative de reconnexion après 5s
@@ -552,27 +622,34 @@ const App = {
                     break;
 
                 case 'barcode_detected':
+                    this.setScanInProgress(false);
                     this.updateBarcodeStatus('success', `Code-barres détecté: ${message.ean}`);
                     if (message.product) {
-                        setTimeout(() => this.showProduct(message.product), 1000);
+                        this.showProduct(message.product);
                     }
                     break;
 
                 case 'barcode_failed':
+                    this.setScanInProgress(false);
                     this.updateBarcodeStatus('error', 'Code-barres non reconnu');
                     break;
 
                 case 'security_alert':
+                    this.setScanInProgress(false);
                     this.showSecurityMessage(message.title, message.message);
                     break;
 
                 case 'error':
+                    this.setScanInProgress(false);
                     this.showError(message.message);
                     break;
 
                 case 'show_screen':
                     {
                         const nextScreen = message.screen || 'home';
+                        if (nextScreen === 'home' || nextScreen === 'scan-choice') {
+                            this.setScanInProgress(false);
+                        }
                         if (
                             AppState.currentScreen === 'product'
                             && Date.now() < (AppState.productLockedUntil || 0)
@@ -609,24 +686,38 @@ const App = {
 
                 case 'qa_answer':
                     this.updateVoiceTranscriptPreview(message.question || '');
-                    this.showSecurityMessage('Réponse Pepper', message.answer || 'Réponse vide');
+                    if (
+                        String(message.context_mode || '').toLowerCase() === 'product'
+                        && AppState.currentProduct
+                    ) {
+                        const preview = document.getElementById('product-voice-transcript-preview');
+                        if (preview) {
+                            preview.textContent = `Réponse: ${message.answer || 'Réponse vide'}`;
+                        }
+                        this.showScreen('product');
+                    } else {
+                        this.showAdviceAnswer(
+                            message.question || '',
+                            message.answer || 'Réponse vide',
+                            message.recommendations || []
+                        );
+                    }
                     break;
 
                 case 'voice_status': {
                     const status = String(message.status || '').toLowerCase();
                     const title = message.title || 'Question vocale';
                     const text = message.message || '';
-                    if (status === 'listening' || status === 'processing') {
-                        if (status === 'listening') {
-                            this.setVoiceRecordingState(true);
-                        }
+                    if (status === 'listening') {
+                        this.setVoiceRecordingState(true);
+                        this.updateVoiceTranscriptPreview(text || 'Micro activé. Parlez puis appuyez sur « Envoyer la question ».');
+                    } else if (status === 'processing') {
                         this.showLoading(text || 'Traitement vocal en cours...');
                     } else if (status === 'timeout' || status === 'error') {
                         this.setVoiceRecordingState(false);
                         this.showSecurityMessage(title, text || "Je n'ai pas bien entendu.");
                     } else if (status === 'transcript') {
                         this.updateVoiceTranscriptPreview(text || '');
-                        this.showLoading(text || 'Transcription reçue...');
                     } else if (status === 'done' && AppState.currentScreen === 'loading') {
                         this.setVoiceRecordingState(false);
                         this.showScreen(AppState.currentProduct ? 'product' : 'advice');

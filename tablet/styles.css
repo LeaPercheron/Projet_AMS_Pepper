@@ -173,6 +173,15 @@ html, body {
     color: #40607f;
 }
 
+/* Masquage global des sous-titres / descriptions secondaires (demande terrain). */
+.home-subtitle,
+.btn-desc,
+.barcode-instruction,
+.top3-subtitle,
+.filter-label {
+    display: none !important;
+}
+
 .scan-choice-container {
     display: flex;
     flex-direction: column;
@@ -531,6 +540,49 @@ html, body {
 .advice-container h2 {
     font-size: 2.2rem;
     margin-bottom: 20px;
+}
+
+.advice-answer-box {
+    width: 100%;
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border-radius: var(--border-radius-md);
+    background: #ffffff;
+    border: 1px solid rgba(13, 143, 134, 0.22);
+    box-shadow: var(--shadow-sm);
+}
+
+.advice-answer-box h3 {
+    font-size: 1rem;
+    margin-bottom: 6px;
+    color: #0a5f66;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.advice-answer-box p {
+    font-size: 1.02rem;
+    line-height: 1.45;
+    color: var(--text-primary);
+}
+
+.advice-reco-section {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.advice-reco-section h3 {
+    font-size: 1.05rem;
+    margin-bottom: 10px;
+    color: #0a5f66;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.advice-reco-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 18px;
 }
 
 .filter-section {

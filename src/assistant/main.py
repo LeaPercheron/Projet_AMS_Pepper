@@ -10,6 +10,8 @@ import socket
 import urllib.request
 import time
 import ipaddress
+import re
+import unicodedata
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional, Any, Dict, List, Tuple
@@ -96,12 +98,14 @@ class PepperAssistant:
         self._scan_lock = asyncio.Lock()
         disable_vlm_env = os.getenv("PEPPER_VLM_DISABLED", "").strip().lower()
         self._vlm_disabled = disable_vlm_env in {"1", "true", "yes", "on"}
+        self._vlm_runtime_failures = 0
         text_q_env = os.getenv("TABLET_TEXT_QUESTION_ENABLED", "0").strip().lower()
         self._tablet_text_question_enabled = text_q_env in {"1", "true", "yes", "on"}
         self._voice_request_seq = 0
         self._voice_transcript_seq = 0
         self._voice_status_seq = 0
         self._realtime_tablet_callbacks_registered = False
+        self._voice_use_product_context = True
         self._scan_dump_logged = False
 
     async def setup(self):
@@ -228,6 +232,24 @@ class PepperAssistant:
                 self.logger.log_warning(
                     "  Vision: VLM désactivé via PEPPER_VLM_DISABLED, mode scan code-barres prioritaire"
                 )
+            else:
+                eager_load = os.getenv("PEPPER_VLM_EAGER_LOAD", "1").strip().lower() in {"1", "true", "yes", "on"}
+                if eager_load and hasattr(self.vision_pipeline, "load"):
+                    self.logger.log_info("  Vision: préchargement VLM")
+                    try:
+                        loaded = await asyncio.to_thread(self.vision_pipeline.load)
+                        if loaded:
+                            self.logger.log_info("  Vision: préchargement VLM OK")
+                        else:
+                            self._vlm_disabled = True
+                            self.logger.log_warning(
+                                "  Vision: préchargement VLM échoué. Fallback code-barres activé."
+                            )
+                    except Exception as e:
+                        self._vlm_disabled = True
+                        self.logger.log_warning(
+                            f"  Vision: préchargement VLM indisponible ({e}). Fallback code-barres activé."
+                        )
 
         except ImportError as e:
             self.logger.log_warning(f"Module vision non disponible: {e}")
@@ -412,11 +434,27 @@ class PepperAssistant:
                     # Bloquant pour réduire l'auto-capture.
                     self.adapter.say(answer_text, True)
 
+            def _voice_context_provider() -> Dict[str, Any]:
+                base_ctx: Dict[str, Any] = {}
+                if self.orchestrator:
+                    try:
+                        base_ctx = self.orchestrator.get_context() or {}
+                    except Exception:
+                        base_ctx = {}
+                if self._voice_use_product_context:
+                    return base_ctx
+                # Question générique conseil: ne pas biaiser la réponse
+                # avec un produit scanné précédemment.
+                ctx = dict(base_ctx)
+                ctx["current_product"] = ""
+                ctx["current_ean"] = ""
+                return ctx
+
             self.voice_fallback = HTTPVoiceFallback(
                 api_key=self.config.openai.api_key,
                 text_client=self.http_fallback_client,
                 speak_callback=_speak_blocking,
-                context_provider=lambda: self.orchestrator.get_context() if self.orchestrator else {},
+                context_provider=_voice_context_provider,
                 on_transcript=self._on_voice_fallback_transcript,
                 on_answer=self._on_voice_fallback_answer,
                 config=vf_config
@@ -554,10 +592,22 @@ class PepperAssistant:
         # Callback thread-safe: publier la réponse sur tablette (si connectée).
         if not self.tablet_server or not self._main_loop:
             return
+        recommendations = []
+        if not self._voice_use_product_context:
+            try:
+                recommendations = self._recommend_products_for_question(transcript, limit=5)
+            except Exception:
+                recommendations = []
         try:
             if hasattr(self.tablet_server, "send_qa_answer"):
                 fut = asyncio.run_coroutine_threadsafe(
-                    self.tablet_server.send_qa_answer(True, transcript, answer),
+                    self.tablet_server.send_qa_answer(
+                        True,
+                        transcript,
+                        answer,
+                        recommendations=recommendations,
+                        context_mode=("product" if self._voice_use_product_context else "general"),
+                    ),
                     self._main_loop
                 )
                 fut.result(timeout=2.0)
@@ -671,6 +721,88 @@ class PepperAssistant:
             "hair_type": self._normalize_hair_type(data.get("hair_type", fallback.get("hair_type", ""))),
             "image": image,
         }
+
+    @staticmethod
+    def _normalize_match_text(value: Any) -> str:
+        text = unicodedata.normalize("NFKD", str(value or ""))
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        text = text.lower()
+        return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+    def _recommend_products_for_question(self, question: str, limit: int = 6) -> List[Dict[str, Any]]:
+        # Recommandations locales (base produits) pour affichage cartes côté tablette.
+        if not self.database or not hasattr(self.database, "get_all_products"):
+            return []
+
+        try:
+            products = list(self.database.get_all_products() or [])
+        except Exception:
+            return []
+        if not products:
+            return []
+
+        q_text = self._normalize_match_text(question)
+        q_tokens = {t for t in q_text.split() if len(t) > 2}
+
+        hint_patterns = {
+            "pellicules": ("pellicule", "antipellic", "anti pellic", "dandruff", "demangeaison"),
+            "gras": ("gras", "sebum", "seborr", "graisse"),
+            "secs": ("sec", "deshydrat", "hydrat", "nourr"),
+            "colores": ("color", "meche"),
+            "sensibles": ("sensible", "irrite", "reactif", "delicat"),
+            "abimes": ("abime", "fragile", "casse", "chute", "repar"),
+            "normaux": ("normal", "quotidien", "frequent", "doux"),
+        }
+
+        active_hints = set()
+        for hint, patterns in hint_patterns.items():
+            if any(p in q_text for p in patterns):
+                active_hints.add(hint)
+
+        scored: List[Tuple[float, Dict[str, Any]]] = []
+        for product in products:
+            payload = self._build_tablet_product_payload(product)
+            hay = self._normalize_match_text(
+                " ".join(
+                    [
+                        payload.get("name", ""),
+                        payload.get("brand", ""),
+                        payload.get("usage", ""),
+                        payload.get("hair_type", ""),
+                        str(getattr(product, "category", "") or ""),
+                    ]
+                )
+            )
+            hay_tokens = set(hay.split())
+
+            score = 0.0
+            for token in q_tokens:
+                if token in hay_tokens:
+                    score += 2.0
+                elif token in hay:
+                    score += 0.6
+
+            for hint in active_hints:
+                if hint in hay:
+                    score += 3.0
+
+            if score > 0:
+                scored.append((score, payload))
+
+        if not scored:
+            default_items = [self._build_tablet_product_payload(p) for p in products[: max(1, limit)]]
+            return default_items[: max(1, limit)]
+
+        scored.sort(key=lambda item: (-item[0], item[1].get("brand", ""), item[1].get("name", "")))
+        unique_by_ean: Dict[str, Dict[str, Any]] = {}
+        for _, payload in scored:
+            ean = str(payload.get("ean", "") or "").strip()
+            key = ean or f"{payload.get('brand','')}::{payload.get('name','')}"
+            if key not in unique_by_ean:
+                unique_by_ean[key] = payload
+            if len(unique_by_ean) >= max(1, limit):
+                break
+        return list(unique_by_ean.values())
 
     def _to_tablet_product(self, payload: Dict[str, Any]):
         if not self._tablet_product_cls:
@@ -1014,10 +1146,23 @@ class PepperAssistant:
         try:
             result = await asyncio.to_thread(self.vision_pipeline.identify_product, images)
         except Exception as e:
-            return "error", f"Erreur scan visuel: {e}"
+            self._vlm_runtime_failures += 1
+            self.logger.log_warning(
+                f"  {scan_label}: erreur VLM ({e}), échec #{self._vlm_runtime_failures}"
+            )
+            if self._vlm_runtime_failures >= 2 and not self._vlm_disabled:
+                self._vlm_disabled = True
+                self.logger.log_warning(
+                    "  Vision: trop d'échecs VLM runtime. Bascule en mode code-barres prioritaire."
+                )
+            ok, _, payload = await self._detect_barcode_from_images(images)
+            if ok and payload:
+                return "product", payload
+            return "barcode", f"Erreur scan visuel: {e}"
 
         raw = getattr(result, "raw_result", None)
         if not result or not getattr(result, "success", False):
+            self._vlm_runtime_failures += 1
             message = getattr(result, "message", "") or "Le produit n'a pas pu être identifié."
             if self._is_vlm_unavailable_message(message):
                 if not self._vlm_disabled:
@@ -1034,6 +1179,7 @@ class PepperAssistant:
                     "Passez en scan code-barres."
                 )
             return "error", message
+        self._vlm_runtime_failures = 0
 
         if raw and getattr(raw, "source", None) and getattr(raw.source, "value", "") == "vlm_medium":
             top3_payloads = []
@@ -1149,6 +1295,32 @@ class PepperAssistant:
         self.logger.log_warning("  Scan code-barres: échec, aucun EAN détecté après toutes les tentatives")
         return False, "", None
 
+    async def _run_barcode_scan_sequence(self, websocket, intro_message: str = "") -> bool:
+        # Exécute un scan code-barres complet + notifications tablette/robot.
+        await self.tablet_server.send_show_screen(websocket, "barcode-scan")
+        await self._set_scan_led((255, 140, 0))
+        await self._say_scan_status(intro_message or "Je scanne le code barres.")
+
+        ok, ean, payload = await self._perform_barcode_scan()
+        if ok:
+            await self._set_scan_led((0, 190, 0))
+            product_msg = self._to_tablet_product(payload or {"ean": ean})
+            await self.tablet_server.send_barcode_detected(websocket, ean, product_msg)
+            if payload and payload.get("name"):
+                await self.tablet_server.send_product_identified(websocket, product_msg)
+            if payload:
+                self._sync_current_product_context(payload)
+            else:
+                self._sync_current_product_context({"ean": ean})
+            self.logger.log_info(f"  Tablette: code-barres détecté ({ean})")
+            return True
+
+        await self._set_scan_led((220, 30, 30))
+        await self._say_scan_status("Je n'ai pas détecté le code barres.")
+        await self.tablet_server.send_barcode_failed(websocket)
+        self.logger.log_warning("  Tablette: scan code-barres terminé sans résultat")
+        return False
+
     async def _handle_tablet_start_visual_scan(self, websocket, data):
         # Lance un scan visuel piloté par la tablette.
         if self._scan_lock.locked():
@@ -1163,13 +1335,14 @@ class PepperAssistant:
 
         async with self._scan_lock:
             try:
+                # Réactivité UI: afficher le chargement immédiatement.
+                await self.tablet_server.send_show_screen(websocket, "loading")
                 self._sync_current_product_context({})
                 if self.adapter and hasattr(self.adapter, "freeze_head"):
                     await asyncio.to_thread(self.adapter.freeze_head)
                 await self._set_scan_led((140, 0, 255))
                 await self._say_scan_status("Je scanne le produit.")
 
-                await self.tablet_server.send_show_screen(websocket, "loading")
                 mode, payload = await self._perform_visual_scan()
 
                 if mode == "product":
@@ -1184,20 +1357,25 @@ class PepperAssistant:
                     top3 = [self._to_tablet_top3_result(item) for item in payload]
                     await self.tablet_server.send_top3_results(websocket, top3)
                 elif mode == "error":
-                    await self._set_scan_led((220, 30, 30))
-                    await self._say_scan_status("Le scan visuel a échoué.")
-                    await self.tablet_server._send_error(websocket, str(payload))
-                    await self.tablet_server.send_show_screen(websocket, "scan-choice")
-                elif mode == "barcode":
-                    await self._set_scan_led((255, 140, 0))
-                    await self._say_scan_status("Je passe au scan du code barres.")
-                    await self.tablet_server.send_show_screen(websocket, "barcode-scan")
-                    if payload:
-                        await self.tablet_server.send_security_alert(
+                    self.logger.log_warning(f"  Tablette: scan visuel en erreur ({payload})")
+                    fallback_on_error = os.getenv("PEPPER_VISUAL_ERROR_FALLBACK_BARCODE", "1").strip().lower() in {
+                        "1", "true", "yes", "on"
+                    }
+                    if fallback_on_error:
+                        await self._run_barcode_scan_sequence(
                             websocket,
-                            "Scan visuel insuffisant",
-                            str(payload)
+                            intro_message="Le scan visuel a échoué. Je passe au scan du code barres.",
                         )
+                    else:
+                        await self._set_scan_led((220, 30, 30))
+                        await self._say_scan_status("Le scan visuel a échoué.")
+                        await self.tablet_server._send_error(websocket, str(payload))
+                        await self.tablet_server.send_show_screen(websocket, "scan-choice")
+                elif mode == "barcode":
+                    await self._run_barcode_scan_sequence(
+                        websocket,
+                        intro_message="Je passe au scan du code barres.",
+                    )
                 else:
                     await self.tablet_server.send_show_screen(websocket, "barcode-scan")
             finally:
@@ -1223,28 +1401,7 @@ class PepperAssistant:
                 self._sync_current_product_context({})
                 if self.adapter and hasattr(self.adapter, "freeze_head"):
                     await asyncio.to_thread(self.adapter.freeze_head)
-                await self._set_scan_led((255, 140, 0))
-                await self._say_scan_status("Je scanne le code barres.")
-                await self.tablet_server.send_show_screen(websocket, "barcode-scan")
-
-                ok, ean, payload = await self._perform_barcode_scan()
-                if ok:
-                    await self._set_scan_led((0, 190, 0))
-                    product_msg = self._to_tablet_product(payload or {"ean": ean})
-                    await self.tablet_server.send_barcode_detected(websocket, ean, product_msg)
-                    if payload and payload.get("name"):
-                        await self.tablet_server.send_product_identified(websocket, product_msg)
-                    if payload:
-                        self._sync_current_product_context(payload)
-                    else:
-                        self._sync_current_product_context({"ean": ean})
-                    self.logger.log_info(f"  Tablette: code-barres détecté ({ean})")
-                    return
-
-                await self._set_scan_led((220, 30, 30))
-                await self._say_scan_status("Je n'ai pas détecté le code barres.")
-                await self.tablet_server.send_barcode_failed(websocket)
-                self.logger.log_warning("  Tablette: scan code-barres terminé sans résultat")
+                await self._run_barcode_scan_sequence(websocket)
             finally:
                 if self.adapter and hasattr(self.adapter, "unfreeze_head"):
                     await asyncio.to_thread(self.adapter.unfreeze_head)
@@ -1308,6 +1465,8 @@ class PepperAssistant:
         # Déclenche une fenêtre d'écoute vocale fallback via bouton tablette.
         payload_data = data or {}
         manual_send = str(payload_data.get("manual_send", "1")).strip().lower() in {"1", "true", "yes", "on"}
+        use_product_context = str(payload_data.get("use_product_context", "1")).strip().lower() in {"1", "true", "yes", "on"}
+        self._voice_use_product_context = use_product_context
 
         if self._is_realtime_connected():
             await self._push_voice_status(
@@ -1331,6 +1490,20 @@ class PepperAssistant:
             duration = max(3.0, min(180.0, requested))
         except Exception:
             pass
+        if manual_send:
+            # Mode manuel: pas de timeout court, l'utilisateur envoie explicitement.
+            duration = max(duration, float(os.getenv("PEPPER_VOICE_MANUAL_MAX_S", "3600") or 3600.0))
+
+        # Réactivité UI: signaler l'écoute avant les appels robot potentiellement lents.
+        await self._push_voice_status(
+            status="listening",
+            message=(
+                "Micro activé. Parlez maintenant puis appuyez sur « Envoyer la question »."
+                if manual_send else f"Micro activé. Parlez maintenant ({int(duration)} s)."
+            ),
+            title="Question vocale",
+            websocket=websocket,
+        )
 
         # En mode ALAudioRecorder, ajuster le fallback avec le format réellement observé.
         vf_config = getattr(self.voice_fallback, "config", None)
@@ -1354,28 +1527,11 @@ class PepperAssistant:
             await asyncio.to_thread(self.adapter.say, "Je vous écoute.", False)
 
         self._voice_request_seq += 1
-        request_id = self._voice_request_seq
-        transcript_seq_before = self._voice_transcript_seq
 
-        self.logger.log_info(f"  Tablette: question vocale démarrée (durée={duration:.1f}s)")
-        await self._push_voice_status(
-            status="listening",
-            message=(
-                "Micro activé. Parlez maintenant puis appuyez sur « Envoyer la question »."
-                if manual_send else f"Micro activé. Parlez maintenant ({int(duration)} s)."
-            ),
-            title="Question vocale",
-            websocket=websocket,
+        self.logger.log_info(
+            "  Tablette: question vocale démarrée "
+            f"(durée={duration:.1f}s, contexte_produit={'on' if use_product_context else 'off'})"
         )
-        if not manual_send:
-            asyncio.create_task(
-                self._notify_voice_timeout_if_silent(
-                    websocket=websocket,
-                    request_id=request_id,
-                    duration_s=duration,
-                    transcript_seq_before=transcript_seq_before,
-                )
-            )
 
     async def _handle_tablet_stop_voice_question(self, websocket, data):
         # Arrêt manuel de la fenêtre d'écoute vocale et envoi immédiat.
@@ -1395,9 +1551,6 @@ class PepperAssistant:
             )
             return
 
-        request_id = self._voice_request_seq
-        transcript_seq_before = self._voice_transcript_seq
-
         await self._push_voice_status(
             status="processing",
             message="Question envoyée. Analyse en cours...",
@@ -1409,16 +1562,6 @@ class PepperAssistant:
             await asyncio.to_thread(self.voice_fallback.finalize_listen_window)
         elif hasattr(self.voice_fallback, "arm_listen_window"):
             await asyncio.to_thread(self.voice_fallback.arm_listen_window, 0.5)
-
-        # Si aucun transcript n'arrive, notifier rapidement.
-        asyncio.create_task(
-            self._notify_voice_timeout_if_silent(
-                websocket=websocket,
-                request_id=request_id,
-                duration_s=0.5,
-                transcript_seq_before=transcript_seq_before,
-            )
-        )
 
     async def _notify_voice_timeout_if_silent(
         self,
@@ -1508,8 +1651,15 @@ class PepperAssistant:
             except Exception:
                 pass
 
+        recommendations = self._recommend_products_for_question(question, limit=5)
         if self.tablet_server and hasattr(self.tablet_server, "send_qa_answer"):
-            await self.tablet_server.send_qa_answer(websocket, question, answer)
+            await self.tablet_server.send_qa_answer(
+                websocket,
+                question,
+                answer,
+                recommendations=recommendations,
+                context_mode="general",
+            )
 
     def _get_loaded_modules(self) -> list:
         # Retourne la liste des modules charges.

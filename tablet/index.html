@@ -10,19 +10,16 @@
     <div id="screen-home" class="screen active">
         <div class="home-container">
             <h1 class="home-title">Bonjour !</h1>
-            <p class="home-subtitle">Comment puis-je vous aider ?</p>
 
             <div class="home-buttons">
                 <button class="home-btn home-btn-product" onclick="App.showScreen('scan-choice')">
                     <span class="btn-icon"></span>
                     <span class="btn-text">PRODUIT</span>
-                    <span class="btn-desc">Identifier un produit</span>
                 </button>
 
                 <button class="home-btn home-btn-question" onclick="App.showScreen('advice')">
                     <span class="btn-icon"></span>
                     <span class="btn-text">QUESTION</span>
-                    <span class="btn-desc">Parler à Pepper</span>
                 </button>
             </div>
 
@@ -39,13 +36,11 @@
                 <button class="scan-choice-btn" onclick="App.startVisualScan()">
                     <span class="btn-icon">📷</span>
                     <span class="btn-text">Montrer le produit</span>
-                    <span class="btn-desc">Je le montre à la caméra</span>
                 </button>
 
                 <button class="scan-choice-btn" onclick="App.startBarcodeScan()">
                     <span class="btn-icon"></span>
                     <span class="btn-text">Scanner le code-barres</span>
-                    <span class="btn-desc">Je présente le code-barres</span>
                 </button>
             </div>
 
@@ -63,7 +58,6 @@
                 <div class="barcode-frame">
                     <div class="scan-line"></div>
                 </div>
-                <p class="barcode-instruction">Présentez le code-barres face à la caméra</p>
             </div>
 
             <div class="barcode-status">
@@ -85,7 +79,6 @@
     <div id="screen-top3" class="screen">
         <div class="top3-container">
             <h2>Est-ce l'un de ces produits ?</h2>
-            <p class="top3-subtitle">Touchez le produit correspondant</p>
 
             <div class="top3-cards" id="top3-cards">
                 <!-- Cartes générées dynamiquement -->
@@ -152,7 +145,6 @@
 
             <div class="detail-section">
                 <h3>Question vocale</h3>
-                <p>Appuyez puis parlez à voix haute.</p>
                 <div class="product-buttons">
                     <button id="voice-start-btn" class="primary-btn" onclick="App.startVoiceQuestion()">
                         🎤 Poser une question vocale
@@ -167,8 +159,17 @@
                 <p id="voice-transcript-preview" class="voice-transcript-preview"></p>
             </div>
 
+            <div id="advice-answer-box" class="advice-answer-box" style="display:none;">
+                <h3>Réponse Pepper</h3>
+                <p id="advice-answer-text"></p>
+            </div>
+
+            <div id="advice-reco-section" class="advice-reco-section" style="display:none;">
+                <h3>Produits recommandés</h3>
+                <div class="advice-reco-grid" id="advice-reco-grid"></div>
+            </div>
+
             <div class="filter-section">
-                <p class="filter-label">Filtrer par type de cheveux :</p>
                 <div class="filter-buttons" id="filter-buttons">
                     <button class="filter-btn active" data-filter="all" onclick="App.filterProducts('all')">
                         Tous
