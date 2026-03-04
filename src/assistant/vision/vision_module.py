@@ -476,19 +476,32 @@ class BarcodeDetector:
             return None
         max_images = max(1, int(os.getenv("OPENAI_BARCODE_MAX_IMAGES", "3") or 3))
         required = max(1, int(os.getenv("OPENAI_BARCODE_REQUIRED_DETECTIONS", "1") or 1))
+        max_views = max(1, int(os.getenv("OPENAI_BARCODE_MAX_VIEWS_PER_IMAGE", "3") or 3))
 
         detections: Dict[str, List[int]] = {}
         candidates = list(images[:max_images])
         for idx, image in enumerate(candidates):
             try:
-                ean = self._detect_single_openai(image)
-                if not ean:
-                    continue
-                if ean not in detections:
-                    detections[ean] = []
-                detections[ean].append(idx)
-                if self._debug:
-                    print(f"[BarcodeDetector] openai image={idx} ean={ean}")
+                views: List[Image.Image] = [image]
+                try:
+                    for _, crop in self._build_search_crops(image):
+                        views.append(crop)
+                        if len(views) >= max_views:
+                            break
+                except Exception:
+                    views = [image]
+
+                for view_idx, view in enumerate(views):
+                    ean = self._detect_single_openai(view)
+                    if not ean:
+                        continue
+                    if ean not in detections:
+                        detections[ean] = []
+                    detections[ean].append(idx)
+                    if self._debug:
+                        print(f"[BarcodeDetector] openai image={idx} view={view_idx} ean={ean}")
+                    # Un EAN pour une image suffit.
+                    break
             except Exception as e:
                 if self._debug:
                     print(f"[BarcodeDetector] openai image={idx} erreur: {e}")

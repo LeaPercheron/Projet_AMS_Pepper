@@ -424,6 +424,7 @@ class PepperAssistant:
                 transcription_model=transcription_model,
                 manual_trigger=True,
                 listen_window_s=9.0,
+                manual_buffer_s=float(os.getenv("OPENAI_HTTP_MANUAL_BUFFER_S", "20") or "20"),
                 local_stt_enabled=os.getenv("OPENAI_HTTP_LOCAL_STT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"},
                 local_stt_model=(os.getenv("OPENAI_HTTP_LOCAL_STT_MODEL", "") or "mlx-community/distil-whisper-large-v3").strip(),
                 local_stt_path=os.getenv("OPENAI_HTTP_LOCAL_STT_PATH", "").strip(),
@@ -1049,6 +1050,14 @@ class PepperAssistant:
         elif scan_source == "pyzbar":
             self.logger.log_info(f"  Scan code-barres: EAN détecté via pyzbar ({ean})")
         product = self._find_product_by_ean(ean)
+        require_in_db = os.getenv("PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB", "1").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        if require_in_db and not product:
+            self.logger.log_warning(
+                f"  Scan code-barres: EAN {ean} détecté mais absent de la base produits, nouvelle tentative."
+            )
+            return False, "", None
         payload = self._build_tablet_product_payload(product, fallback={"ean": ean})
         payload["scan_confidence"] = confidence
         payload["scan_source"] = scan_source

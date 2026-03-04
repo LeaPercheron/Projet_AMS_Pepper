@@ -96,6 +96,17 @@ class OpenAIHTTPFallbackClient:
         )
         return any(m in a for m in markers)
 
+    @staticmethod
+    def _fallback_non_medical_answer(question: str) -> str:
+        q = str(question or "").strip()
+        if not q:
+            return "Pouvez-vous reformuler votre question sur les cheveux ou un shampooing précis ?"
+        return (
+            "Je peux vous aider sur les questions capillaires non médicales. "
+            "Pouvez-vous reformuler en précisant votre besoin (pellicules, cheveux gras, secs, "
+            "ou le nom du shampooing) ?"
+        )
+
     def ask(self, question: str, context: Optional[Dict[str, Any]] = None) -> str:
         question = (question or "").strip()
         if not question:
@@ -148,10 +159,14 @@ class OpenAIHTTPFallbackClient:
                         if self._trace:
                             preview = retry if len(retry) <= 220 else (retry[:217] + "...")
                             logger.info(f"Voice trace: réponse OpenAIHTTPFallback retry={preview}")
+                        if self._is_pharmacist_redirect(retry):
+                            return self._fallback_non_medical_answer(question)
                         return retry.strip()
                 if self._trace:
                     preview = answer if len(answer) <= 220 else (answer[:217] + "...")
                     logger.info(f"Voice trace: réponse OpenAIHTTPFallback={preview}")
+                if self._is_pharmacist_redirect(answer) and not self._is_medical_question(question):
+                    return self._fallback_non_medical_answer(question)
                 return answer
         except Exception as e:
             if self._trace:
@@ -197,10 +212,14 @@ class OpenAIHTTPFallbackClient:
                                 if self._trace:
                                     preview = retry_content if len(retry_content) <= 220 else (retry_content[:217] + "...")
                                     logger.info(f"Voice trace: réponse ChatCompletions retry={preview}")
+                                if self._is_pharmacist_redirect(retry_content):
+                                    return self._fallback_non_medical_answer(question)
                                 return retry_content.strip()
                     if self._trace:
                         preview = content if len(content) <= 220 else (content[:217] + "...")
                         logger.info(f"Voice trace: réponse ChatCompletions={preview}")
+                    if self._is_pharmacist_redirect(content) and not self._is_medical_question(question):
+                        return self._fallback_non_medical_answer(question)
                     return content.strip()
         except Exception as e:
             if self._trace:

@@ -37,6 +37,7 @@ class VoiceFallbackConfig:
     language: str = "fr"
     manual_trigger: bool = False
     listen_window_s: float = 8.0
+    manual_buffer_s: float = 20.0
     mono_channel_index: int = 2
     input_gain: float = 1.0
     local_stt_enabled: bool = True
@@ -81,7 +82,11 @@ class HTTPVoiceFallback:
         self._listen_until = 0.0 if self.config.manual_trigger else float("inf")
         self._manual_window_samples = []
         self._manual_window_len_s = 0.0
+        self._manual_window_sample_count = 0
         self._manual_window_lock = threading.Lock()
+        self._manual_window_max_samples = int(
+            max(3.0, float(self.config.manual_buffer_s)) * self.config.input_sample_rate
+        )
         self._local_stt_warned_unavailable = False
         self._local_stt_warned_model = False
         self._local_stt_path = self._resolve_local_stt_path()
@@ -104,6 +109,7 @@ class HTTPVoiceFallback:
         with self._manual_window_lock:
             self._manual_window_samples = []
             self._manual_window_len_s = 0.0
+            self._manual_window_sample_count = 0
 
     def ingest(self, audio_bytes: bytes):
         if not audio_bytes or self._stop_event.is_set():
@@ -129,6 +135,7 @@ class HTTPVoiceFallback:
             self._mute_until = time.time() + 1.0
             self._manual_window_samples = []
             self._manual_window_len_s = 0.0
+            self._manual_window_sample_count = 0
         # Ignore la phrase robot "Je vous écoute" juste après le clic.
         self._reset_vad_state()
         self._drain_queue(max_items=128)
@@ -170,6 +177,16 @@ class HTTPVoiceFallback:
                 with self._manual_window_lock:
                     self._manual_window_samples.append(mono_i16)
                     self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+                    self._manual_window_sample_count += mono_i16.size
+                    # En mode manuel long, conserver uniquement les dernières secondes utiles
+                    # pour éviter les transcriptions polluées.
+                    while self._manual_window_samples and self._manual_window_sample_count > self._manual_window_max_samples:
+                        dropped = self._manual_window_samples.pop(0)
+                        self._manual_window_sample_count = max(0, self._manual_window_sample_count - dropped.size)
+                        self._manual_window_len_s = max(
+                            0.0,
+                            self._manual_window_len_s - (dropped.size / float(self.config.input_sample_rate)),
+                        )
                     current_len_s = self._manual_window_len_s
 
                 # Sécurité: si l'utilisateur parle très longtemps, on force un flush.
@@ -235,6 +252,7 @@ class HTTPVoiceFallback:
             samples = self._concat_samples(self._manual_window_samples)
             self._manual_window_samples = []
             self._manual_window_len_s = 0.0
+            self._manual_window_sample_count = 0
         if samples.size == 0:
             return
         self._finalize_samples(samples, utterance_s)
@@ -258,6 +276,11 @@ class HTTPVoiceFallback:
             if not transcript:
                 if self._trace:
                     logger.info("Voice trace: transcription vide (rien envoyé au LLM)")
+                return
+            transcript = self._sanitize_transcript(transcript)
+            if not transcript:
+                if self._trace:
+                    logger.info("Voice trace: transcription rejetée (parasite/hors sujet audio)")
                 return
             if self._trace:
                 preview = transcript if len(transcript) <= 180 else (transcript[:177] + "...")
@@ -302,10 +325,15 @@ class HTTPVoiceFallback:
         try:
             bio = io.BytesIO(wav_bytes)
             bio.name = "pepper_fallback.wav"
+            stt_prompt = (
+                os.getenv("OPENAI_HTTP_TRANSCRIPTION_PROMPT", "").strip()
+                or "Question vocale en français sur les cheveux et les shampooings."
+            )
             out = self._openai.audio.transcriptions.create(
                 model=self.config.transcription_model,
                 file=bio,
-                language=self.config.language
+                language=self.config.language,
+                prompt=stt_prompt,
             )
             return getattr(out, "text", "") or ""
         except Exception as e:
@@ -315,6 +343,26 @@ class HTTPVoiceFallback:
                     logger.warning(f"OpenAI transcription indisponible ({e}); STT local utilisé.")
                     return local_text
             raise
+
+    @staticmethod
+    def _sanitize_transcript(text: str) -> str:
+        value = str(text or "").strip()
+        if not value:
+            return ""
+        lowered = value.lower()
+        noise_markers = (
+            "sous-titres réalisés",
+            "subtitles by",
+            "amara.org",
+            "la communauté d'amara",
+        )
+        if any(marker in lowered for marker in noise_markers):
+            return ""
+        # Filtre minimal anti-bruit: au moins 2 mots contenant des lettres.
+        words = [w for w in value.split() if any(ch.isalpha() for ch in w)]
+        if len(words) < 2:
+            return ""
+        return value
 
     def _resolve_local_stt_path(self) -> str:
         explicit = (self.config.local_stt_path or "").strip()
