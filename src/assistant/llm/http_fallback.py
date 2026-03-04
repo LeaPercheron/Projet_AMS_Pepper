@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = (
@@ -11,6 +15,8 @@ SYSTEM_PROMPT = (
     "Réponds en français, 2 à 4 phrases max, ton clair et professionnel. "
     "Tu peux répondre aux questions capillaires courantes (cheveux gras, secs, "
     "pellicules, usage d'un shampooing, fréquence d'utilisation, comparaison de produits). "
+    "Tu dois répondre DIRECTEMENT à la question posée; ne récite pas une fiche produit complète "
+    "sauf si l'utilisateur le demande explicitement. "
     "Tu ne dois PAS faire de diagnostic, ni de prescription, ni de recommandation de traitement médical. "
     "Tu refuses uniquement les questions médicales explicites (maladie, médicament, ordonnance, posologie, traitement, interaction). "
     "En cas de question médicale explicite, réponds exactement: "
@@ -30,6 +36,7 @@ class OpenAIHTTPFallbackClient:
         self.api_key = api_key
         self.model = model
         self.temperature = temperature
+        self._trace = os.getenv("PEPPER_VOICE_TRACE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
     @staticmethod
     def _build_user_prompt(question: str, context: Optional[Dict[str, Any]]) -> str:
@@ -41,7 +48,10 @@ class OpenAIHTTPFallbackClient:
             lines.append(f"Produit courant identifié: {current_product}")
         if current_ean:
             lines.append(f"EAN courant: {current_ean}")
-        lines.append("Réponds brièvement pour une restitution vocale Pepper.")
+        lines.append(
+            "Réponds brièvement pour une restitution vocale Pepper, "
+            "et réponds précisément à la question avant tout."
+        )
         return "\n".join(lines)
 
     @staticmethod
@@ -91,6 +101,15 @@ class OpenAIHTTPFallbackClient:
         if not question:
             return "Je n'ai pas reçu de question."
 
+        if self._trace:
+            preview = question if len(question) <= 180 else (question[:177] + "...")
+            ctx = context or {}
+            logger.info(
+                "Voice trace: OpenAIHTTPFallback.ask "
+                f"(model={self.model}, context_product={'on' if bool(ctx.get('current_product')) else 'off'}) "
+                f"question={preview}"
+            )
+
         from openai import OpenAI
 
         client = OpenAI(api_key=self.api_key)
@@ -117,14 +136,26 @@ class OpenAIHTTPFallbackClient:
                 # Anti-faux-refus: si le modèle redirige vers pharmacien sur une question non médicale,
                 # on force une reformulation une seule fois.
                 if self._is_pharmacist_redirect(answer) and not self._is_medical_question(question):
+                    if self._trace:
+                        logger.info(
+                            "Voice trace: faux refus détecté (pharmacien) sur question non médicale, retry forcé"
+                        )
                     retry = _responses_call(
                         "Important: la question est capillaire (non médicale). "
                         "Ne redirige pas vers pharmacien; réponds avec des conseils produit concrets."
                     )
                     if retry:
+                        if self._trace:
+                            preview = retry if len(retry) <= 220 else (retry[:217] + "...")
+                            logger.info(f"Voice trace: réponse OpenAIHTTPFallback retry={preview}")
                         return retry.strip()
+                if self._trace:
+                    preview = answer if len(answer) <= 220 else (answer[:217] + "...")
+                    logger.info(f"Voice trace: réponse OpenAIHTTPFallback={preview}")
                 return answer
-        except Exception:
+        except Exception as e:
+            if self._trace:
+                logger.warning(f"Voice trace: erreur Responses API: {e}")
             pass
 
         # Fallback legacy: Chat Completions
@@ -142,8 +173,38 @@ class OpenAIHTTPFallbackClient:
             if choices:
                 content = getattr(choices[0].message, "content", "") or ""
                 if content:
+                    if self._is_pharmacist_redirect(content) and not self._is_medical_question(question):
+                        retry_resp = client.chat.completions.create(
+                            model=self.model,
+                            temperature=self.temperature,
+                            max_tokens=220,
+                            messages=[
+                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        f"{user_prompt}\n"
+                                        "Important: la question est capillaire (non médicale). "
+                                        "Ne redirige pas vers pharmacien; réponds avec des conseils produit concrets."
+                                    ),
+                                },
+                            ],
+                        )
+                        retry_choices = getattr(retry_resp, "choices", []) or []
+                        if retry_choices:
+                            retry_content = getattr(retry_choices[0].message, "content", "") or ""
+                            if retry_content:
+                                if self._trace:
+                                    preview = retry_content if len(retry_content) <= 220 else (retry_content[:217] + "...")
+                                    logger.info(f"Voice trace: réponse ChatCompletions retry={preview}")
+                                return retry_content.strip()
+                    if self._trace:
+                        preview = content if len(content) <= 220 else (content[:217] + "...")
+                        logger.info(f"Voice trace: réponse ChatCompletions={preview}")
                     return content.strip()
-        except Exception:
+        except Exception as e:
+            if self._trace:
+                logger.warning(f"Voice trace: erreur ChatCompletions: {e}")
             pass
 
         return (

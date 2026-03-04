@@ -107,6 +107,7 @@ class PepperAssistant:
         self._realtime_tablet_callbacks_registered = False
         self._voice_use_product_context = True
         self._scan_dump_logged = False
+        self._voice_trace = os.getenv("PEPPER_VOICE_TRACE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
     async def setup(self):
         # Initialise tous les modules.
@@ -504,14 +505,6 @@ class PepperAssistant:
                     "Question vocale",
                 ),
             )
-            self.openai_client.on(
-                "on_transcript",
-                lambda text: self._push_voice_status_threadsafe(
-                    "transcript",
-                    f"Transcription: {str(text or '').strip()}",
-                    "Question vocale",
-                ),
-            )
             self._realtime_tablet_callbacks_registered = True
         except Exception as e:
             self.logger.log_warning(f"  Realtime UI callbacks non initialisés: {e}")
@@ -566,12 +559,11 @@ class PepperAssistant:
             return
         self._voice_transcript_seq += 1
         text = str(transcript or "").strip()
-        if text:
+        if self._voice_trace and text:
             preview = text if len(text) <= 180 else (text[:177] + "...")
-            self._push_voice_status_threadsafe(
-                "transcript",
-                f"Transcription: {preview}",
-                "Question vocale",
+            self.logger.log_info(
+                "  Voice trace: transcription reçue "
+                f"(context_mode={'product' if self._voice_use_product_context else 'general'}): {preview}"
             )
         self._push_voice_status_threadsafe(
             "processing",
@@ -592,6 +584,11 @@ class PepperAssistant:
         # Callback thread-safe: publier la réponse sur tablette (si connectée).
         if not self.tablet_server or not self._main_loop:
             return
+        if self._voice_trace:
+            preview = str(answer or "").strip()
+            if len(preview) > 220:
+                preview = preview[:217] + "..."
+            self.logger.log_info(f"  Voice trace: réponse OpenAI reçue: {preview}")
         recommendations = []
         if not self._voice_use_product_context:
             try:
@@ -1046,10 +1043,15 @@ class PepperAssistant:
 
         ean = str(barcode.ean13 or "").strip()
         confidence = float(getattr(barcode, "confidence", 0.0) or 0.0)
+        scan_source = str(getattr(detector, "last_source", "") or "barcode")
+        if scan_source == "openai_vision":
+            self.logger.log_info(f"  Scan code-barres: EAN détecté via OpenAI Vision ({ean})")
+        elif scan_source == "pyzbar":
+            self.logger.log_info(f"  Scan code-barres: EAN détecté via pyzbar ({ean})")
         product = self._find_product_by_ean(ean)
         payload = self._build_tablet_product_payload(product, fallback={"ean": ean})
         payload["scan_confidence"] = confidence
-        payload["scan_source"] = "barcode"
+        payload["scan_source"] = scan_source
         return True, ean, payload
 
     @staticmethod
@@ -1673,10 +1675,45 @@ class PepperAssistant:
             websocket=websocket,
         )
 
+        transcript_seq_before = self._voice_transcript_seq
         if hasattr(self.voice_fallback, "finalize_listen_window"):
             await asyncio.to_thread(self.voice_fallback.finalize_listen_window)
         elif hasattr(self.voice_fallback, "arm_listen_window"):
             await asyncio.to_thread(self.voice_fallback.arm_listen_window, 0.5)
+
+        # Si aucune transcription n'arrive après l'envoi manuel, prévenir clairement.
+        self._voice_request_seq += 1
+        request_id = self._voice_request_seq
+        asyncio.create_task(
+            self._notify_voice_no_transcript_after_stop(
+                websocket=websocket,
+                request_id=request_id,
+                transcript_seq_before=transcript_seq_before,
+            )
+        )
+
+    async def _notify_voice_no_transcript_after_stop(
+        self,
+        websocket,
+        request_id: int,
+        transcript_seq_before: int,
+    ):
+        # Feedback explicite si "Envoyer la question" est appuyé sans audio exploitable.
+        await asyncio.sleep(2.2)
+
+        if request_id != self._voice_request_seq:
+            return
+        if self._voice_transcript_seq > transcript_seq_before:
+            return
+        if not self.tablet_server:
+            return
+
+        await self._push_voice_status(
+            status="timeout",
+            message="Aucune question captée. Rapprochez-vous et reparlez, puis appuyez sur envoyer.",
+            title="Question vocale",
+            websocket=websocket,
+        )
 
     async def _notify_voice_timeout_if_silent(
         self,

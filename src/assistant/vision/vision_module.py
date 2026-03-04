@@ -291,6 +291,17 @@ class BarcodeDetector:
         self._pyzbar_available = False
         self._debug = os.getenv("PEPPER_BARCODE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
         self._deep_search = os.getenv("PEPPER_BARCODE_DEEP_SEARCH", "").strip().lower() in {"1", "true", "yes", "on"}
+        self._openai_first_enabled = os.getenv("PEPPER_BARCODE_OPENAI_FIRST", "1").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        self._openai_model = (
+            os.getenv("OPENAI_VISION_BARCODE_MODEL", "").strip()
+            or os.getenv("OPENAI_VISION_MODEL", "").strip()
+            or "gpt-4o-mini"
+        )
+        self._openai_client = None
+        self.last_source = "none"
+        self._setup_openai_client()
         try:
             from pyzbar import pyzbar
             self._pyzbar = pyzbar
@@ -313,6 +324,194 @@ class BarcodeDetector:
                     pass
             if not self._pyzbar_available:
                 print("[BarcodeDetector] pyzbar non disponible - pip install pyzbar")
+
+    def _setup_openai_client(self):
+        if not self._openai_first_enabled:
+            return
+        api_key = (os.getenv("OPENAI_API_KEY", "") or "").strip()
+        if not api_key:
+            return
+        try:
+            from openai import OpenAI
+            timeout_s = float(os.getenv("OPENAI_BARCODE_TIMEOUT_S", "14") or 14)
+            max_retries = int(os.getenv("OPENAI_BARCODE_MAX_RETRIES", "1") or 1)
+            self._openai_client = OpenAI(
+                api_key=api_key,
+                timeout=timeout_s,
+                max_retries=max_retries,
+            )
+        except Exception as e:
+            if self._debug:
+                print(f"[BarcodeDetector] OpenAI indisponible: {e}")
+
+    @staticmethod
+    def _is_valid_ean13(ean: str) -> bool:
+        value = str(ean or "").strip()
+        if len(value) != 13 or not value.isdigit():
+            return False
+        digits = [int(ch) for ch in value]
+        base = digits[:12]
+        checksum = digits[12]
+        odd_sum = sum(base[0::2])
+        even_sum = sum(base[1::2])
+        expected = (10 - ((odd_sum + 3 * even_sum) % 10)) % 10
+        return checksum == expected
+
+    @staticmethod
+    def _extract_ean13_from_text(text: str) -> Optional[str]:
+        for match in re.finditer(r"(?<!\d)(\d{13})(?!\d)", str(text or "")):
+            candidate = match.group(1)
+            if BarcodeDetector._is_valid_ean13(candidate):
+                return candidate
+        return None
+
+    @staticmethod
+    def _image_to_data_url(image: Image.Image, max_side: int = 1024, quality: int = 86) -> str:
+        img = image.convert("RGB")
+        width, height = img.size
+        biggest = max(width, height)
+        if biggest > max_side:
+            scale = max_side / float(biggest)
+            img = img.resize(
+                (max(1, int(width * scale)), max(1, int(height * scale))),
+                Image.BILINEAR,
+            )
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        payload = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{payload}"
+
+    @staticmethod
+    def _extract_text_from_openai_response(resp: Any) -> str:
+        text = getattr(resp, "output_text", "") or ""
+        if text:
+            return text.strip()
+        output = getattr(resp, "output", None) or []
+        chunks: List[str] = []
+        for item in output:
+            for content in getattr(item, "content", []) or []:
+                if getattr(content, "type", "") in {"output_text", "text"}:
+                    value = getattr(content, "text", "") or ""
+                    if value:
+                        chunks.append(value)
+        return " ".join(chunks).strip()
+
+    def _detect_single_openai(self, image: Image.Image) -> Optional[str]:
+        if not self._openai_client:
+            return None
+        prompt = (
+            "Lis uniquement le code-barres visible sur l'image.\n"
+            "Retourne STRICTEMENT un seul format:\n"
+            "EAN13: <13_chiffres>\n"
+            "ou\n"
+            "EAN13: NONE\n"
+            "N'invente rien."
+        )
+        image_url = self._image_to_data_url(image)
+        attempts = max(1, int(os.getenv("OPENAI_BARCODE_INFERENCE_ATTEMPTS", "2") or 2))
+        retry_delay_s = max(0.0, float(os.getenv("OPENAI_BARCODE_RETRY_DELAY_S", "0.3") or 0.3))
+
+        for attempt in range(1, attempts + 1):
+            text = ""
+            try:
+                resp = self._openai_client.responses.create(
+                    model=self._openai_model,
+                    temperature=0,
+                    max_output_tokens=28,
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {"type": "input_image", "image_url": image_url},
+                            ],
+                        }
+                    ],
+                )
+                text = self._extract_text_from_openai_response(resp)
+            except Exception as e:
+                if self._debug:
+                    print(
+                        f"[BarcodeDetector] OpenAI responses erreur "
+                        f"(tentative {attempt}/{attempts}): {e}"
+                    )
+
+            if not text:
+                try:
+                    resp = self._openai_client.chat.completions.create(
+                        model=self._openai_model,
+                        temperature=0,
+                        max_tokens=28,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    {"type": "image_url", "image_url": {"url": image_url}},
+                                ],
+                            }
+                        ],
+                    )
+                    choices = getattr(resp, "choices", []) or []
+                    if choices:
+                        text = (getattr(choices[0].message, "content", "") or "").strip()
+                except Exception as e:
+                    if self._debug:
+                        print(
+                            f"[BarcodeDetector] OpenAI chat erreur "
+                            f"(tentative {attempt}/{attempts}): {e}"
+                        )
+
+            ean = self._extract_ean13_from_text(text)
+            if ean:
+                return ean
+
+            if attempt < attempts:
+                time.sleep(retry_delay_s)
+
+        return None
+
+    def _detect_in_images_openai(self, images: List[Image.Image]) -> Optional[BarcodeResult]:
+        if not self._openai_client or not images:
+            return None
+        max_images = max(1, int(os.getenv("OPENAI_BARCODE_MAX_IMAGES", "3") or 3))
+        required = max(1, int(os.getenv("OPENAI_BARCODE_REQUIRED_DETECTIONS", "1") or 1))
+
+        detections: Dict[str, List[int]] = {}
+        candidates = list(images[:max_images])
+        for idx, image in enumerate(candidates):
+            try:
+                ean = self._detect_single_openai(image)
+                if not ean:
+                    continue
+                if ean not in detections:
+                    detections[ean] = []
+                detections[ean].append(idx)
+                if self._debug:
+                    print(f"[BarcodeDetector] openai image={idx} ean={ean}")
+            except Exception as e:
+                if self._debug:
+                    print(f"[BarcodeDetector] openai image={idx} erreur: {e}")
+
+        if not detections:
+            return None
+
+        best_ean = ""
+        best_hits: List[int] = []
+        for ean, hits in detections.items():
+            if len(hits) > len(best_hits):
+                best_ean = ean
+                best_hits = hits
+
+        if not best_ean or len(best_hits) < required:
+            return None
+
+        return BarcodeResult(
+            ean13=best_ean,
+            confidence=len(best_hits) / max(1, len(candidates)),
+            positions=[],
+            image_indices=best_hits,
+        )
 
     @staticmethod
     def _normalize_barcode_value(code_type: str, raw_value: str) -> Optional[str]:
@@ -395,10 +594,18 @@ class BarcodeDetector:
 
     def detect_in_images(self, images: List[Image.Image]) -> Optional[BarcodeResult]:
         # Détecte les codes-barres dans plusieurs images.
-        if not self._pyzbar_available:
+        if not images:
+            self.last_source = "none"
             return None
 
-        if not images:
+        if self._openai_first_enabled:
+            openai_barcode = self._detect_in_images_openai(images)
+            if openai_barcode and getattr(openai_barcode, "ean13", None):
+                self.last_source = "openai_vision"
+                return openai_barcode
+
+        if not self._pyzbar_available:
+            self.last_source = "none"
             return None
 
         # Détecter dans chaque image
@@ -459,6 +666,7 @@ class BarcodeDetector:
 
         if best_ean:
             occurrences = detections[best_ean]
+            self.last_source = "pyzbar"
             return BarcodeResult(
                 ean13=best_ean,
                 confidence=len(occurrences) / len(images),
@@ -470,6 +678,7 @@ class BarcodeDetector:
         if detections:
             ean = list(detections.keys())[0]
             occurrences = detections[ean]
+            self.last_source = "pyzbar"
             return BarcodeResult(
                 ean13=ean,
                 confidence=len(occurrences) / len(images),
@@ -479,6 +688,7 @@ class BarcodeDetector:
 
         if self._debug:
             print(f"[BarcodeDetector] Aucun code détecté sur {len(images)} image(s).")
+        self.last_source = "none"
         return None
 
     def detect_single(self, image: Image.Image) -> List[str]:

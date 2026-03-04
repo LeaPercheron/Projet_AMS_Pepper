@@ -220,13 +220,12 @@
 
         updateVoiceTranscriptPreview: function (text) {
             var value = String(text || "").trim();
-            var msg = value ? ("Transcription: " + value) : "";
             var ids = ["voice-transcript-preview", "product-voice-transcript-preview"];
             var i;
             for (i = 0; i < ids.length; i += 1) {
                 var el = byId(ids[i]);
                 if (el) {
-                    el.textContent = msg;
+                    el.textContent = value;
                 }
             }
         },
@@ -629,14 +628,14 @@
             } else if (message.type === "status") {
                 this.updateConnectionStatus(message.status || "connecté");
             } else if (message.type === "qa_answer") {
-                this.updateVoiceTranscriptPreview(message.question || "");
                 if (
                     String(message.context_mode || "").toLowerCase() === "product"
                     && AppState.currentProduct
                 ) {
                     var preview = byId("product-voice-transcript-preview");
                     if (preview) {
-                        preview.textContent = "Réponse: " + (message.answer || "Réponse vide");
+                        var a = (message.answer || "Réponse vide").trim();
+                        preview.textContent = "Réponse: " + a;
                     }
                     this.showScreen("product");
                 } else {
@@ -659,7 +658,8 @@
                     this.setVoiceRecordingState(false);
                     this.showSecurityMessage(title, msg || "Je n'ai pas bien entendu.");
                 } else if (status === "transcript") {
-                    this.updateVoiceTranscriptPreview(msg);
+                    // Transcription cachée côté UI (demande métier).
+                    this.log("Transcription vocale reçue (masquée).");
                 } else if (status === "done" && AppState.currentScreen === "loading") {
                     this.setVoiceRecordingState(false);
                     this.showScreen(AppState.currentProduct ? "product" : "advice");

@@ -85,6 +85,7 @@ class HTTPVoiceFallback:
         self._local_stt_warned_unavailable = False
         self._local_stt_warned_model = False
         self._local_stt_path = self._resolve_local_stt_path()
+        self._trace = os.getenv("PEPPER_VOICE_TRACE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -248,13 +249,28 @@ class HTTPVoiceFallback:
                 self._resample_i16(samples, self.config.input_sample_rate, self.config.target_sample_rate),
                 sample_rate=self.config.target_sample_rate
             )
+            if self._trace:
+                logger.info(
+                    "Voice trace: segment audio prêt "
+                    f"(durée={utterance_s:.2f}s, bytes={len(wav_bytes)}, stt={self.config.transcription_model})"
+                )
             transcript = self._transcribe_wav(wav_bytes).strip()
             if not transcript:
+                if self._trace:
+                    logger.info("Voice trace: transcription vide (rien envoyé au LLM)")
                 return
+            if self._trace:
+                preview = transcript if len(transcript) <= 180 else (transcript[:177] + "...")
+                logger.info(f"Voice trace: transcription OK: {preview}")
             if self._on_transcript:
                 self._on_transcript(transcript)
 
             context = self._context_provider() if self._context_provider else {}
+            if self._trace:
+                logger.info(
+                    "Voice trace: envoi vers OpenAI HTTP fallback "
+                    f"(context_product={'on' if bool((context or {}).get('current_product')) else 'off'})"
+                )
             try:
                 answer = (self._text_client.ask(transcript, context) or "").strip()
             except Exception as e:
@@ -264,7 +280,12 @@ class HTTPVoiceFallback:
                 else:
                     return
             if not answer:
+                if self._trace:
+                    logger.info("Voice trace: réponse vide depuis OpenAI HTTP fallback")
                 return
+            if self._trace:
+                preview = answer if len(answer) <= 220 else (answer[:217] + "...")
+                logger.info(f"Voice trace: réponse texte OK: {preview}")
             if self._on_answer:
                 self._on_answer(transcript, answer)
 

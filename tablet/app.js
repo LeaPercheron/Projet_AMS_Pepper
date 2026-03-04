@@ -203,10 +203,9 @@ const App = {
 
     updateVoiceTranscriptPreview(text) {
         const value = String(text || '').trim();
-        const msg = value ? `Transcription: ${value}` : '';
         ['voice-transcript-preview', 'product-voice-transcript-preview'].forEach((id) => {
             const el = document.getElementById(id);
-            if (el) el.textContent = msg;
+            if (el) el.textContent = value;
         });
     },
 
@@ -670,7 +669,6 @@ const App = {
                     break;
 
                 case 'qa_answer':
-                    this.updateVoiceTranscriptPreview(message.question || '');
                     if (
                         String(message.context_mode || '').toLowerCase() === 'product'
                         && AppState.currentProduct
@@ -702,7 +700,7 @@ const App = {
                         this.setVoiceRecordingState(false);
                         this.showSecurityMessage(title, text || "Je n'ai pas bien entendu.");
                     } else if (status === 'transcript') {
-                        this.updateVoiceTranscriptPreview(text || '');
+                        this.log('Transcription vocale reçue (masquée).');
                     } else if (status === 'done' && AppState.currentScreen === 'loading') {
                         this.setVoiceRecordingState(false);
                         this.showScreen(AppState.currentProduct ? 'product' : 'advice');
