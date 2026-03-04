@@ -538,6 +538,9 @@ class VLMModule:
             os.getenv("OPENAI_VISION_FALLBACK_ENABLED", "1").strip().lower()
             in {"1", "true", "yes", "on"}
         )
+        self._backend_preference = (
+            os.getenv("PEPPER_VLM_BACKEND", "auto").strip().lower() or "auto"
+        )
 
         # Base de produits pour matching
         self.product_database = product_database or {}
@@ -619,6 +622,12 @@ class VLMModule:
             err = f"returncode={proc.returncode}"
         if os.getenv("PEPPER_VLM_DEBUG", "").strip().lower() not in {"1", "true", "yes", "on"}:
             err = err.splitlines()[0] if err.splitlines() else err
+        if (
+            "Traceback (most recent call last):" in err
+            or "NSRangeException" in err
+            or "Terminating app due to uncaught exception" in err
+        ):
+            err = "mlx.core indisponible (Metal non accessible dans cette session)"
         return False, err
 
     def _setup_openai_fallback(self) -> bool:
@@ -647,6 +656,14 @@ class VLMModule:
         # Charge le modèle VLM.
         print("[VLM] Chargement du modèle...")
         start_time = time.time()
+
+        if self._backend_preference == "openai":
+            print("[VLM] Backend forcé: OpenAI")
+            if self._setup_openai_fallback():
+                self._load_time_ms = (time.time() - start_time) * 1000
+                print(f"[VLM] Fallback vision OpenAI actif ({self._openai_model})")
+                return True
+            return False
 
         mlx_ok, mlx_msg = self._mlx_healthcheck()
         if not mlx_ok:
@@ -882,52 +899,58 @@ Réponds avec 3 propositions au format:
         if not self._openai_client:
             return None
         image_url = self._image_to_data_url(image)
+        attempts = max(1, int(os.getenv("OPENAI_VISION_INFERENCE_ATTEMPTS", "2") or 2))
+        retry_delay_s = max(0.0, float(os.getenv("OPENAI_VISION_RETRY_DELAY_S", "0.4") or 0.4))
 
-        # Chemin principal: Responses API.
-        try:
-            resp = self._openai_client.responses.create(
-                model=self._openai_model,
-                temperature=0.2,
-                max_output_tokens=max_tokens,
-                input=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": prompt},
-                            {"type": "input_image", "image_url": image_url},
-                        ],
-                    }
-                ],
-            )
-            text = self._extract_text_from_openai_response(resp)
-            if text:
-                return text
-        except Exception as e:
-            print(f"[VLM] OpenAI Responses erreur: {e}")
+        for i in range(1, attempts + 1):
+            # Chemin principal: Responses API.
+            try:
+                resp = self._openai_client.responses.create(
+                    model=self._openai_model,
+                    temperature=0.2,
+                    max_output_tokens=max_tokens,
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {"type": "input_image", "image_url": image_url},
+                            ],
+                        }
+                    ],
+                )
+                text = self._extract_text_from_openai_response(resp)
+                if text:
+                    return text
+            except Exception as e:
+                print(f"[VLM] OpenAI Responses erreur (tentative {i}/{attempts}): {e}")
 
-        # Fallback legacy: Chat Completions.
-        try:
-            resp = self._openai_client.chat.completions.create(
-                model=self._openai_model,
-                temperature=0.2,
-                max_tokens=max_tokens,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": image_url}},
-                        ],
-                    }
-                ],
-            )
-            choices = getattr(resp, "choices", []) or []
-            if choices:
-                content = getattr(choices[0].message, "content", "") or ""
-                if content:
-                    return content.strip()
-        except Exception as e:
-            print(f"[VLM] OpenAI Chat erreur: {e}")
+            # Fallback legacy: Chat Completions.
+            try:
+                resp = self._openai_client.chat.completions.create(
+                    model=self._openai_model,
+                    temperature=0.2,
+                    max_tokens=max_tokens,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": image_url}},
+                            ],
+                        }
+                    ],
+                )
+                choices = getattr(resp, "choices", []) or []
+                if choices:
+                    content = getattr(choices[0].message, "content", "") or ""
+                    if content:
+                        return content.strip()
+            except Exception as e:
+                print(f"[VLM] OpenAI Chat erreur (tentative {i}/{attempts}): {e}")
+
+            if i < attempts:
+                time.sleep(retry_delay_s)
 
         return None
 

@@ -25,7 +25,7 @@ class OpenAIHTTPFallbackClient:
         self,
         api_key: str,
         model: str = "gpt-4o-mini",
-        temperature: float = 0.4,
+        temperature: float = 0.2,
     ):
         self.api_key = api_key
         self.model = model
@@ -65,6 +65,27 @@ class OpenAIHTTPFallbackClient:
                         chunks.append(value)
         return " ".join(chunks).strip()
 
+    @staticmethod
+    def _is_medical_question(question: str) -> bool:
+        q = str(question or "").lower()
+        markers = (
+            "médicament", "medicament", "ordonnance", "posologie", "traitement",
+            "maladie", "psoriasis", "eczéma", "eczema", "dermatite",
+            "diagnostic", "interaction", "contre-indication", "effet secondaire",
+            "allergie", "allergique", "médecin", "medecin",
+        )
+        return any(m in q for m in markers)
+
+    @staticmethod
+    def _is_pharmacist_redirect(answer: str) -> bool:
+        a = str(answer or "").lower()
+        markers = (
+            "consulter le pharmacien",
+            "je ne peux pas répondre",
+            "je ne suis pas habilité",
+        )
+        return any(m in a for m in markers)
+
     def ask(self, question: str, context: Optional[Dict[str, Any]] = None) -> str:
         question = (question or "").strip()
         if not question:
@@ -75,19 +96,33 @@ class OpenAIHTTPFallbackClient:
         client = OpenAI(api_key=self.api_key)
         user_prompt = self._build_user_prompt(question, context)
 
-        # Chemin principal: Responses API
-        try:
+        def _responses_call(extra_user_note: str = "") -> str:
+            note = (extra_user_note or "").strip()
+            user_content = user_prompt if not note else f"{user_prompt}\n{note}"
             resp = client.responses.create(
                 model=self.model,
                 temperature=self.temperature,
                 max_output_tokens=220,
                 input=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": user_content},
                 ],
             )
-            answer = self._extract_text_from_response(resp)
+            return self._extract_text_from_response(resp)
+
+        # Chemin principal: Responses API
+        try:
+            answer = _responses_call()
             if answer:
+                # Anti-faux-refus: si le modèle redirige vers pharmacien sur une question non médicale,
+                # on force une reformulation une seule fois.
+                if self._is_pharmacist_redirect(answer) and not self._is_medical_question(question):
+                    retry = _responses_call(
+                        "Important: la question est capillaire (non médicale). "
+                        "Ne redirige pas vers pharmacien; réponds avec des conseils produit concrets."
+                    )
+                    if retry:
+                        return retry.strip()
                 return answer
         except Exception:
             pass

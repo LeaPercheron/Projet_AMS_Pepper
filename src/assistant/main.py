@@ -1064,13 +1064,26 @@ class PepperAssistant:
         )
         return any(marker in text for marker in markers)
 
-    def _resolve_scan_attempts(self, env_key: str, default_attempts: int, scan_name: str) -> Tuple[bool, int]:
+    def _resolve_scan_attempts(
+        self,
+        env_key: str,
+        default_attempts: int,
+        scan_name: str,
+        min_attempts: int = 1,
+    ) -> Tuple[bool, int]:
         # Résout le nombre de tentatives de scan avec garde-fou anti-boucle infinie.
         raw = int(os.getenv(env_key, str(default_attempts)) or default_attempts)
         allow_unlimited = os.getenv("PEPPER_SCAN_ALLOW_UNLIMITED", "0").strip().lower() in {
             "1", "true", "yes", "on"
         }
+        min_attempts = max(1, int(min_attempts or 1))
         if raw > 0:
+            if raw < min_attempts:
+                self.logger.log_warning(
+                    f"  {scan_name}: {env_key}={raw} trop faible; "
+                    f"utilisation de {min_attempts} tentatives minimum."
+                )
+                return False, min_attempts
             return False, raw
         if allow_unlimited:
             self.logger.log_warning(
@@ -1078,7 +1091,7 @@ class PepperAssistant:
             )
             return True, 0
 
-        safe_default = max(1, int(default_attempts or 1))
+        safe_default = max(min_attempts, int(default_attempts or 1))
         self.logger.log_warning(
             f"  {scan_name}: {env_key}={raw} ignoré pour éviter un scan infini. "
             f"Utilisation de {safe_default} tentatives."
@@ -1101,6 +1114,7 @@ class PepperAssistant:
             env_key="PEPPER_VISUAL_ATTEMPTS",
             default_attempts=6,
             scan_name="Scan visuel",
+            min_attempts=int(os.getenv("PEPPER_VISUAL_MIN_ATTEMPTS", "3") or 3),
         )
         base_frames = max(3, int(getattr(self.config.vision, "num_frames", 3) or 3))
         frames_per_attempt = max(
@@ -1135,7 +1149,14 @@ class PepperAssistant:
                 interval_s=frame_interval_s,
                 scan_label=scan_label,
             )
-            if mode in {"product", "top3", "error"}:
+            if mode in {"product", "top3"}:
+                return mode, payload
+            if mode == "error":
+                # Erreurs transitoires caméra/VLM: retenter au lieu de basculer immédiatement.
+                self.logger.log_warning(f"  {scan_label}: erreur transitoire, nouvelle tentative ({payload})")
+                if unlimited or attempt < attempts:
+                    await asyncio.sleep(between_attempt_s)
+                    continue
                 return mode, payload
 
             # mode "barcode": on retente d'abord le visuel (si multi-tentatives),
@@ -1183,7 +1204,11 @@ class PepperAssistant:
             self.logger.log_warning(
                 f"  {scan_label}: erreur VLM ({e}), échec #{self._vlm_runtime_failures}"
             )
-            if self._vlm_runtime_failures >= 2 and not self._vlm_disabled:
+            if (
+                self._is_vlm_unavailable_message(str(e))
+                and self._vlm_runtime_failures >= 2
+                and not self._vlm_disabled
+            ):
                 self._vlm_disabled = True
                 self.logger.log_warning(
                     "  Vision: trop d'échecs VLM runtime. Bascule en mode code-barres prioritaire."
@@ -1276,6 +1301,7 @@ class PepperAssistant:
             env_key="PEPPER_BARCODE_ATTEMPTS",
             default_attempts=20,
             scan_name="Scan code-barres",
+            min_attempts=int(os.getenv("PEPPER_BARCODE_MIN_ATTEMPTS", "3") or 3),
         )
         frames_per_attempt = max(1, int(os.getenv("PEPPER_BARCODE_FRAMES", "4") or 4))
         frame_interval_s = max(0.05, float(os.getenv("PEPPER_BARCODE_FRAME_INTERVAL", "0.14") or 0.14))
@@ -1340,9 +1366,10 @@ class PepperAssistant:
         if ok:
             await self._set_scan_led((0, 190, 0))
             product_msg = self._to_tablet_product(payload or {"ean": ean})
-            await self.tablet_server.send_barcode_detected(websocket, ean, product_msg)
             if payload and payload.get("name"):
                 await self.tablet_server.send_product_identified(websocket, product_msg)
+            else:
+                await self.tablet_server.send_barcode_detected(websocket, ean, product_msg)
             if payload:
                 self._sync_current_product_context(payload)
             else:
