@@ -37,7 +37,7 @@ class VoiceFallbackConfig:
     language: str = "fr"
     manual_trigger: bool = False
     listen_window_s: float = 8.0
-    manual_buffer_s: float = 20.0
+    manual_buffer_s: float = 240.0
     mono_channel_index: int = 2
     input_gain: float = 1.0
     local_stt_enabled: bool = True
@@ -84,13 +84,17 @@ class HTTPVoiceFallback:
         self._manual_window_len_s = 0.0
         self._manual_window_sample_count = 0
         self._manual_window_lock = threading.Lock()
+        manual_buffer_s = float(self.config.manual_buffer_s or 0.0)
         self._manual_window_max_samples = int(
-            max(3.0, float(self.config.manual_buffer_s)) * self.config.input_sample_rate
+            max(0.0, manual_buffer_s) * self.config.input_sample_rate
         )
         self._local_stt_warned_unavailable = False
         self._local_stt_warned_model = False
         self._local_stt_path = self._resolve_local_stt_path()
         self._trace = os.getenv("PEPPER_VOICE_TRACE", "1").strip().lower() in {"1", "true", "yes", "on"}
+        self._transcript_filter_enabled = os.getenv("PEPPER_VOICE_TRANSCRIPT_FILTER", "0").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -180,7 +184,11 @@ class HTTPVoiceFallback:
                     self._manual_window_sample_count += mono_i16.size
                     # En mode manuel long, conserver uniquement les dernières secondes utiles
                     # pour éviter les transcriptions polluées.
-                    while self._manual_window_samples and self._manual_window_sample_count > self._manual_window_max_samples:
+                    while (
+                        self._manual_window_max_samples > 0
+                        and self._manual_window_samples
+                        and self._manual_window_sample_count > self._manual_window_max_samples
+                    ):
                         dropped = self._manual_window_samples.pop(0)
                         self._manual_window_sample_count = max(0, self._manual_window_sample_count - dropped.size)
                         self._manual_window_len_s = max(
@@ -277,11 +285,12 @@ class HTTPVoiceFallback:
                 if self._trace:
                     logger.info("Voice trace: transcription vide (rien envoyé au LLM)")
                 return
-            transcript = self._sanitize_transcript(transcript)
-            if not transcript:
-                if self._trace:
-                    logger.info("Voice trace: transcription rejetée (parasite/hors sujet audio)")
-                return
+            if self._transcript_filter_enabled:
+                transcript = self._sanitize_transcript(transcript)
+                if not transcript:
+                    if self._trace:
+                        logger.info("Voice trace: transcription rejetée (parasite/hors sujet audio)")
+                    return
             if self._trace:
                 preview = transcript if len(transcript) <= 180 else (transcript[:177] + "...")
                 logger.info(f"Voice trace: transcription OK: {preview}")
@@ -357,10 +366,6 @@ class HTTPVoiceFallback:
             "la communauté d'amara",
         )
         if any(marker in lowered for marker in noise_markers):
-            return ""
-        # Filtre minimal anti-bruit: au moins 2 mots contenant des lettres.
-        words = [w for w in value.split() if any(ch.isalpha() for ch in w)]
-        if len(words) < 2:
             return ""
         return value
 

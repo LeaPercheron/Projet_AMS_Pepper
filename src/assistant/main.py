@@ -424,7 +424,7 @@ class PepperAssistant:
                 transcription_model=transcription_model,
                 manual_trigger=True,
                 listen_window_s=9.0,
-                manual_buffer_s=float(os.getenv("OPENAI_HTTP_MANUAL_BUFFER_S", "20") or "20"),
+                manual_buffer_s=float(os.getenv("OPENAI_HTTP_MANUAL_BUFFER_S", "240") or "240"),
                 local_stt_enabled=os.getenv("OPENAI_HTTP_LOCAL_STT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"},
                 local_stt_model=(os.getenv("OPENAI_HTTP_LOCAL_STT_MODEL", "") or "mlx-community/distil-whisper-large-v3").strip(),
                 local_stt_path=os.getenv("OPENAI_HTTP_LOCAL_STT_PATH", "").strip(),
@@ -1708,7 +1708,11 @@ class PepperAssistant:
         transcript_seq_before: int,
     ):
         # Feedback explicite si "Envoyer la question" est appuyé sans audio exploitable.
-        await asyncio.sleep(2.2)
+        delay_s = max(
+            2.2,
+            float(os.getenv("PEPPER_VOICE_NO_TRANSCRIPT_DELAY_S", "7.5") or 7.5),
+        )
+        await asyncio.sleep(delay_s)
 
         if request_id != self._voice_request_seq:
             return
