@@ -230,16 +230,6 @@ const App = {
             this.showError('Connexion tablette indisponible.');
             return;
         }
-
-        if (CONFIG.scanTimeout > 0) {
-            setTimeout(() => {
-                if (AppState.currentScreen === 'loading') {
-                    this.setScanInProgress(false);
-                    this.showScreen('scan-choice');
-                    this.showError('Le scan a pris trop de temps. Veuillez réessayer.');
-                }
-            }, CONFIG.scanTimeout);
-        }
     },
 
     /**
@@ -260,15 +250,6 @@ const App = {
             this.setScanInProgress(false);
             this.showError('Connexion tablette indisponible.');
             return;
-        }
-
-        if (CONFIG.scanTimeout > 0) {
-            setTimeout(() => {
-                if (AppState.currentScreen === 'barcode-scan') {
-                    this.setScanInProgress(false);
-                    this.updateBarcodeStatus('error', 'Le scan a pris trop de temps. Réessayez.');
-                }
-            }, CONFIG.scanTimeout);
         }
     },
 
@@ -640,6 +621,10 @@ const App = {
                     break;
 
                 case 'error':
+                    if (String(message.message || '').toLowerCase().includes('scan déjà en cours')) {
+                        this.log('Erreur non bloquante ignorée:', message.message);
+                        break;
+                    }
                     this.setScanInProgress(false);
                     this.showError(message.message);
                     break;

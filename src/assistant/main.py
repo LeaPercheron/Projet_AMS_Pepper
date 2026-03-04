@@ -1064,8 +1064,44 @@ class PepperAssistant:
         )
         return any(marker in text for marker in markers)
 
+    def _resolve_scan_attempts(self, env_key: str, default_attempts: int, scan_name: str) -> Tuple[bool, int]:
+        # Résout le nombre de tentatives de scan avec garde-fou anti-boucle infinie.
+        raw = int(os.getenv(env_key, str(default_attempts)) or default_attempts)
+        allow_unlimited = os.getenv("PEPPER_SCAN_ALLOW_UNLIMITED", "0").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        if raw > 0:
+            return False, raw
+        if allow_unlimited:
+            self.logger.log_warning(
+                f"  {scan_name}: {env_key}={raw} -> tentatives illimitées activées par PEPPER_SCAN_ALLOW_UNLIMITED"
+            )
+            return True, 0
+
+        safe_default = max(1, int(default_attempts or 1))
+        self.logger.log_warning(
+            f"  {scan_name}: {env_key}={raw} ignoré pour éviter un scan infini. "
+            f"Utilisation de {safe_default} tentatives."
+        )
+        return False, safe_default
+
+    def _get_scan_operation_timeout_s(self) -> float:
+        # Timeout global optionnel pour une opération de scan tablette.
+        # 0 ou négatif => désactivé (comportement par défaut).
+        try:
+            timeout_s = float(os.getenv("PEPPER_SCAN_OPERATION_TIMEOUT_S", "0") or 0.0)
+        except Exception:
+            timeout_s = 0.0
+        if timeout_s <= 0:
+            return 0.0
+        return max(15.0, min(1800.0, timeout_s))
+
     async def _perform_visual_scan(self) -> Tuple[str, Any]:
-        attempts_raw = int(os.getenv("PEPPER_VISUAL_ATTEMPTS", "6") or 6)
+        unlimited, attempts = self._resolve_scan_attempts(
+            env_key="PEPPER_VISUAL_ATTEMPTS",
+            default_attempts=6,
+            scan_name="Scan visuel",
+        )
         base_frames = max(3, int(getattr(self.config.vision, "num_frames", 3) or 3))
         frames_per_attempt = max(
             1,
@@ -1073,9 +1109,6 @@ class PepperAssistant:
         )
         frame_interval_s = max(0.05, float(os.getenv("PEPPER_VISUAL_FRAME_INTERVAL", "0.18") or 0.18))
         between_attempt_s = max(0.05, float(os.getenv("PEPPER_VISUAL_ATTEMPT_COOLDOWN", "0.2") or 0.2))
-
-        unlimited = attempts_raw <= 0
-        attempts = attempts_raw if attempts_raw > 0 else 0
         if unlimited:
             self.logger.log_info(
                 "  Scan visuel: démarrage (tentatives illimitées, "
@@ -1239,12 +1272,14 @@ class PepperAssistant:
         if not self.vision_pipeline:
             return False, "", None
 
-        attempts_raw = int(os.getenv("PEPPER_BARCODE_ATTEMPTS", "20") or 20)
+        unlimited, attempts = self._resolve_scan_attempts(
+            env_key="PEPPER_BARCODE_ATTEMPTS",
+            default_attempts=20,
+            scan_name="Scan code-barres",
+        )
         frames_per_attempt = max(1, int(os.getenv("PEPPER_BARCODE_FRAMES", "4") or 4))
         frame_interval_s = max(0.05, float(os.getenv("PEPPER_BARCODE_FRAME_INTERVAL", "0.14") or 0.14))
         between_attempt_s = max(0.05, float(os.getenv("PEPPER_BARCODE_ATTEMPT_COOLDOWN", "0.2") or 0.2))
-        unlimited = attempts_raw <= 0
-        attempts = attempts_raw if attempts_raw > 0 else 0
 
         if unlimited:
             self.logger.log_info(
@@ -1318,13 +1353,15 @@ class PepperAssistant:
         await self._set_scan_led((220, 30, 30))
         await self._say_scan_status("Je n'ai pas détecté le code barres.")
         await self.tablet_server.send_barcode_failed(websocket)
+        await self.tablet_server.send_show_screen(websocket, "scan-choice")
         self.logger.log_warning("  Tablette: scan code-barres terminé sans résultat")
         return False
 
     async def _handle_tablet_start_visual_scan(self, websocket, data):
         # Lance un scan visuel piloté par la tablette.
         if self._scan_lock.locked():
-            await self.tablet_server._send_error(websocket, "Scan déjà en cours.")
+            # Ne pas afficher une erreur bloquante côté tablette: un scan est déjà actif.
+            self.logger.log_info("  Tablette: start_visual_scan ignoré (scan déjà en cours)")
             return
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             await self.tablet_server._send_error(websocket, "Caméra Pepper indisponible.")
@@ -1343,7 +1380,14 @@ class PepperAssistant:
                 await self._set_scan_led((140, 0, 255))
                 await self._say_scan_status("Je scanne le produit.")
 
-                mode, payload = await self._perform_visual_scan()
+                scan_timeout_s = self._get_scan_operation_timeout_s()
+                if scan_timeout_s > 0:
+                    mode, payload = await asyncio.wait_for(
+                        self._perform_visual_scan(),
+                        timeout=scan_timeout_s,
+                    )
+                else:
+                    mode, payload = await self._perform_visual_scan()
 
                 if mode == "product":
                     await self._set_scan_led((0, 190, 0))
@@ -1362,22 +1406,49 @@ class PepperAssistant:
                         "1", "true", "yes", "on"
                     }
                     if fallback_on_error:
-                        await self._run_barcode_scan_sequence(
-                            websocket,
-                            intro_message="Le scan visuel a échoué. Je passe au scan du code barres.",
-                        )
+                        if scan_timeout_s > 0:
+                            await asyncio.wait_for(
+                                self._run_barcode_scan_sequence(
+                                    websocket,
+                                    intro_message="Le scan visuel a échoué. Je passe au scan du code barres.",
+                                ),
+                                timeout=scan_timeout_s,
+                            )
+                        else:
+                            await self._run_barcode_scan_sequence(
+                                websocket,
+                                intro_message="Le scan visuel a échoué. Je passe au scan du code barres.",
+                            )
                     else:
                         await self._set_scan_led((220, 30, 30))
                         await self._say_scan_status("Le scan visuel a échoué.")
                         await self.tablet_server._send_error(websocket, str(payload))
                         await self.tablet_server.send_show_screen(websocket, "scan-choice")
                 elif mode == "barcode":
-                    await self._run_barcode_scan_sequence(
-                        websocket,
-                        intro_message="Je passe au scan du code barres.",
-                    )
+                    if scan_timeout_s > 0:
+                        await asyncio.wait_for(
+                            self._run_barcode_scan_sequence(
+                                websocket,
+                                intro_message="Je passe au scan du code barres.",
+                            ),
+                            timeout=scan_timeout_s,
+                        )
+                    else:
+                        await self._run_barcode_scan_sequence(
+                            websocket,
+                            intro_message="Je passe au scan du code barres.",
+                        )
                 else:
                     await self.tablet_server.send_show_screen(websocket, "barcode-scan")
+            except asyncio.TimeoutError:
+                self.logger.log_warning("  Tablette: scan visuel interrompu (timeout de sécurité)")
+                await self._set_scan_led((220, 30, 30))
+                await self._say_scan_status("Le scan a pris trop de temps.")
+                await self.tablet_server._send_error(
+                    websocket,
+                    "Le scan a pris trop de temps. Réessayez.",
+                )
+                await self.tablet_server.send_show_screen(websocket, "scan-choice")
             finally:
                 if self.adapter and hasattr(self.adapter, "unfreeze_head"):
                     await asyncio.to_thread(self.adapter.unfreeze_head)
@@ -1386,7 +1457,8 @@ class PepperAssistant:
     async def _handle_tablet_start_barcode_scan(self, websocket, data):
         # Lance un scan code-barres dédié.
         if self._scan_lock.locked():
-            await self.tablet_server._send_error(websocket, "Scan déjà en cours.")
+            # Ne pas afficher une erreur bloquante côté tablette: un scan est déjà actif.
+            self.logger.log_info("  Tablette: start_barcode_scan ignoré (scan déjà en cours)")
             return
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             await self.tablet_server._send_error(websocket, "Caméra Pepper indisponible.")
@@ -1401,7 +1473,23 @@ class PepperAssistant:
                 self._sync_current_product_context({})
                 if self.adapter and hasattr(self.adapter, "freeze_head"):
                     await asyncio.to_thread(self.adapter.freeze_head)
-                await self._run_barcode_scan_sequence(websocket)
+                scan_timeout_s = self._get_scan_operation_timeout_s()
+                if scan_timeout_s > 0:
+                    await asyncio.wait_for(
+                        self._run_barcode_scan_sequence(websocket),
+                        timeout=scan_timeout_s,
+                    )
+                else:
+                    await self._run_barcode_scan_sequence(websocket)
+            except asyncio.TimeoutError:
+                self.logger.log_warning("  Tablette: scan code-barres interrompu (timeout de sécurité)")
+                await self._set_scan_led((220, 30, 30))
+                await self._say_scan_status("Le scan a pris trop de temps.")
+                await self.tablet_server._send_error(
+                    websocket,
+                    "Le scan a pris trop de temps. Réessayez.",
+                )
+                await self.tablet_server.send_show_screen(websocket, "scan-choice")
             finally:
                 if self.adapter and hasattr(self.adapter, "unfreeze_head"):
                     await asyncio.to_thread(self.adapter.unfreeze_head)

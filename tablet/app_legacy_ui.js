@@ -285,17 +285,6 @@
                 this.showError("Connexion tablette indisponible.");
                 return;
             }
-
-            if (CONFIG.scanTimeout > 0) {
-                var self = this;
-                setTimeout(function () {
-                    if (AppState.currentScreen === "loading") {
-                        self.setScanInProgress(false);
-                        self.showScreen("scan-choice");
-                        self.showError("Le scan a pris trop de temps. Veuillez réessayer.");
-                    }
-                }, CONFIG.scanTimeout);
-            }
         },
 
         startBarcodeScan: function () {
@@ -310,16 +299,6 @@
                 this.setScanInProgress(false);
                 this.showError("Connexion tablette indisponible.");
                 return;
-            }
-
-            if (CONFIG.scanTimeout > 0) {
-                var self = this;
-                setTimeout(function () {
-                    if (AppState.currentScreen === "barcode-scan") {
-                        self.setScanInProgress(false);
-                        self.updateBarcodeStatus("error", "Le scan a pris trop de temps. Réessayez.");
-                    }
-                }, CONFIG.scanTimeout);
             }
         },
 
@@ -613,8 +592,14 @@
                 this.setScanInProgress(false);
                 this.showSecurityMessage(message.title || "Information", message.message || "");
             } else if (message.type === "error") {
+                var err = String(message.message || "");
+                var errLower = err.toLowerCase();
+                if (errLower.indexOf("scan déjà en cours") >= 0 || errLower.indexOf("scan deja en cours") >= 0) {
+                    this.log("Erreur non bloquante ignorée:", err);
+                    return;
+                }
                 this.setScanInProgress(false);
-                this.showError(message.message || "Erreur inconnue");
+                this.showError(err || "Erreur inconnue");
             } else if (message.type === "show_screen") {
                 var nextScreen = message.screen || "home";
                 if (nextScreen === "home" || nextScreen === "scan-choice") {
