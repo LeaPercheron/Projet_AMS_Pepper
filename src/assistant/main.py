@@ -1858,11 +1858,15 @@ class PepperAssistant:
                 f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz (ALAudioRecorder)"
             )
 
+        # Pepper parle EN PREMIER (bloquant) pour que arm_listen_window ne capte pas le TTS.
+        # Sans blocking=True, le TTS non-bloquant pollue le buffer audio avec la voix robot.
+        if self.adapter and hasattr(self.adapter, "say"):
+            await asyncio.to_thread(self.adapter.say, "Je vous écoute.", True)
+
+        # On arme la fenêtre d'écoute APRÈS la fin du TTS : arm_listen_window vide la queue
+        # (purge l'écho résiduel) et pose un mute de 1 s pour la réverbération.
         if hasattr(self.voice_fallback, "arm_listen_window"):
             await asyncio.to_thread(self.voice_fallback.arm_listen_window, duration)
-
-        if self.adapter and hasattr(self.adapter, "say"):
-            await asyncio.to_thread(self.adapter.say, "Je vous écoute.", False)
 
         self._voice_request_seq += 1
 
