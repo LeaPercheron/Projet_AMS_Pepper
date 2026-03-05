@@ -297,7 +297,7 @@ class BarcodeDetector:
         self._openai_model = (
             os.getenv("OPENAI_VISION_BARCODE_MODEL", "").strip()
             or os.getenv("OPENAI_VISION_MODEL", "").strip()
-            or "gpt-4o-mini"
+            or "gpt-4o"
         )
         self._openai_client = None
         self.last_source = "none"
@@ -400,12 +400,14 @@ class BarcodeDetector:
         if not self._openai_client:
             return None
         prompt = (
-            "Lis uniquement le code-barres visible sur l'image.\n"
+            "Regarde les chiffres imprimés EN TEXTE sous le code-barres sur l'image.\n"
+            "Ces chiffres sont toujours imprimés lisiblement sous les barres verticales.\n"
+            "Lis ces chiffres (il y en a exactement 13 pour un EAN-13).\n"
             "Retourne STRICTEMENT un seul format:\n"
             "EAN13: <13_chiffres>\n"
             "ou\n"
             "EAN13: NONE\n"
-            "N'invente rien."
+            "N'invente rien. Lis uniquement ce qui est écrit."
         )
         image_url = self._image_to_data_url(image)
         attempts = max(1, int(os.getenv("OPENAI_BARCODE_INFERENCE_ATTEMPTS", "2") or 2))

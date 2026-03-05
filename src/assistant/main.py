@@ -1136,14 +1136,16 @@ class PepperAssistant:
         elif scan_source == "pyzbar":
             self.logger.log_info(f"  Scan code-barres: EAN détecté via pyzbar ({ean})")
         product = self._find_product_by_ean(ean)
-        require_in_db = os.getenv("PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB", "1").strip().lower() in {
+        require_in_db = os.getenv("PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB", "0").strip().lower() in {
             "1", "true", "yes", "on"
         }
         if require_in_db and not product:
             self.logger.log_warning(
-                f"  Scan code-barres: EAN {ean} détecté mais absent de la base produits, nouvelle tentative."
+                f"  Scan code-barres: EAN {ean} détecté mais absent de la base produits (PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB=1), nouvelle tentative."
             )
             return False, "", None
+        if not product:
+            self.logger.log_info(f"  Scan code-barres: EAN {ean} détecté (produit absent de la base, signalement tablette).")
         payload = self._build_tablet_product_payload(product, fallback={"ean": ean})
         payload["scan_confidence"] = confidence
         payload["scan_source"] = scan_source
@@ -1615,8 +1617,9 @@ class PepperAssistant:
     async def _handle_tablet_start_visual_scan(self, websocket, data):
         # Lance un scan visuel piloté par la tablette.
         if self._scan_lock.locked():
-            # Ne pas afficher une erreur bloquante côté tablette: un scan est déjà actif.
             self.logger.log_info("  Tablette: start_visual_scan ignoré (scan déjà en cours)")
+            # Libère la tablette: elle a déjà mis scanInProgress=true, on doit la débloquer.
+            await self.tablet_server.send_show_screen(websocket, "scan-choice")
             return
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             await self.tablet_server._send_error(websocket, "Caméra Pepper indisponible.")
@@ -1712,8 +1715,9 @@ class PepperAssistant:
     async def _handle_tablet_start_barcode_scan(self, websocket, data):
         # Lance un scan code-barres dédié.
         if self._scan_lock.locked():
-            # Ne pas afficher une erreur bloquante côté tablette: un scan est déjà actif.
             self.logger.log_info("  Tablette: start_barcode_scan ignoré (scan déjà en cours)")
+            # Libère la tablette: elle a déjà mis scanInProgress=true, on doit la débloquer.
+            await self.tablet_server.send_show_screen(websocket, "scan-choice")
             return
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             await self.tablet_server._send_error(websocket, "Caméra Pepper indisponible.")
