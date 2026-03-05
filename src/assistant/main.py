@@ -609,14 +609,19 @@ class PepperAssistant:
                     ),
                     self._main_loop
                 )
-                fut.result(timeout=2.0)
+                fut.result(timeout=5.0)
             self._push_voice_status_threadsafe(
                 "done",
                 "Réponse envoyée.",
                 "Question vocale",
             )
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.log_warning(f"  Voice: erreur envoi réponse tablette: {e}")
+            self._push_voice_status_threadsafe(
+                "error",
+                "Erreur lors de l'envoi de la réponse. Réessayez.",
+                "Question vocale",
+            )
 
     async def _setup_tablet_handlers(self):
         # Branche les commandes tablette custom.
@@ -1861,12 +1866,31 @@ class PepperAssistant:
         # Pepper parle EN PREMIER (bloquant) pour que arm_listen_window ne capte pas le TTS.
         # Sans blocking=True, le TTS non-bloquant pollue le buffer audio avec la voix robot.
         if self.adapter and hasattr(self.adapter, "say"):
-            await asyncio.to_thread(self.adapter.say, "Je vous écoute.", True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(self.adapter.say, "Je vous écoute.", True),
+                    timeout=8.0,
+                )
+            except asyncio.TimeoutError:
+                self.logger.log_warning("  TTS 'Je vous écoute' timeout (>8s), passage direct à l'écoute.")
+            except Exception as e:
+                self.logger.log_warning(f"  TTS 'Je vous écoute' erreur: {e}")
 
         # On arme la fenêtre d'écoute APRÈS la fin du TTS : arm_listen_window vide la queue
         # (purge l'écho résiduel) et pose un mute de 1 s pour la réverbération.
         if hasattr(self.voice_fallback, "arm_listen_window"):
             await asyncio.to_thread(self.voice_fallback.arm_listen_window, duration)
+
+        # Confirmer à la tablette que le micro est maintenant vraiment actif (après TTS).
+        await self._push_voice_status(
+            status="listening",
+            message=(
+                "Parlez maintenant puis appuyez sur « Envoyer la question »."
+                if manual_send else f"Parlez maintenant ({int(duration)} s)."
+            ),
+            title="Question vocale",
+            websocket=websocket,
+        )
 
         self._voice_request_seq += 1
 
