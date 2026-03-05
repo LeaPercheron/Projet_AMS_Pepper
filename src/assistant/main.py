@@ -609,14 +609,19 @@ class PepperAssistant:
                     ),
                     self._main_loop
                 )
-                fut.result(timeout=2.0)
+                fut.result(timeout=5.0)
             self._push_voice_status_threadsafe(
                 "done",
                 "Réponse envoyée.",
                 "Question vocale",
             )
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.log_warning(f"  Voice: erreur envoi réponse tablette: {e}")
+            self._push_voice_status_threadsafe(
+                "error",
+                "Erreur lors de l'envoi de la réponse. Réessayez.",
+                "Question vocale",
+            )
 
     async def _setup_tablet_handlers(self):
         # Branche les commandes tablette custom.
@@ -1131,14 +1136,16 @@ class PepperAssistant:
         elif scan_source == "pyzbar":
             self.logger.log_info(f"  Scan code-barres: EAN détecté via pyzbar ({ean})")
         product = self._find_product_by_ean(ean)
-        require_in_db = os.getenv("PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB", "1").strip().lower() in {
+        require_in_db = os.getenv("PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB", "0").strip().lower() in {
             "1", "true", "yes", "on"
         }
         if require_in_db and not product:
             self.logger.log_warning(
-                f"  Scan code-barres: EAN {ean} détecté mais absent de la base produits, nouvelle tentative."
+                f"  Scan code-barres: EAN {ean} détecté mais absent de la base produits (PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB=1), nouvelle tentative."
             )
             return False, "", None
+        if not product:
+            self.logger.log_info(f"  Scan code-barres: EAN {ean} détecté (produit absent de la base, signalement tablette).")
         payload = self._build_tablet_product_payload(product, fallback={"ean": ean})
         payload["scan_confidence"] = confidence
         payload["scan_source"] = scan_source
@@ -1610,8 +1617,9 @@ class PepperAssistant:
     async def _handle_tablet_start_visual_scan(self, websocket, data):
         # Lance un scan visuel piloté par la tablette.
         if self._scan_lock.locked():
-            # Ne pas afficher une erreur bloquante côté tablette: un scan est déjà actif.
             self.logger.log_info("  Tablette: start_visual_scan ignoré (scan déjà en cours)")
+            # Libère la tablette: elle a déjà mis scanInProgress=true, on doit la débloquer.
+            await self.tablet_server.send_show_screen(websocket, "scan-choice")
             return
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             await self.tablet_server._send_error(websocket, "Caméra Pepper indisponible.")
@@ -1707,8 +1715,9 @@ class PepperAssistant:
     async def _handle_tablet_start_barcode_scan(self, websocket, data):
         # Lance un scan code-barres dédié.
         if self._scan_lock.locked():
-            # Ne pas afficher une erreur bloquante côté tablette: un scan est déjà actif.
             self.logger.log_info("  Tablette: start_barcode_scan ignoré (scan déjà en cours)")
+            # Libère la tablette: elle a déjà mis scanInProgress=true, on doit la débloquer.
+            await self.tablet_server.send_show_screen(websocket, "scan-choice")
             return
         if not self.adapter or not hasattr(self.adapter, "capture_image"):
             await self.tablet_server._send_error(websocket, "Caméra Pepper indisponible.")
@@ -1858,11 +1867,34 @@ class PepperAssistant:
                 f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz (ALAudioRecorder)"
             )
 
+        # Pepper parle EN PREMIER (bloquant) pour que arm_listen_window ne capte pas le TTS.
+        # Sans blocking=True, le TTS non-bloquant pollue le buffer audio avec la voix robot.
+        if self.adapter and hasattr(self.adapter, "say"):
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(self.adapter.say, "Je vous écoute.", True),
+                    timeout=8.0,
+                )
+            except asyncio.TimeoutError:
+                self.logger.log_warning("  TTS 'Je vous écoute' timeout (>8s), passage direct à l'écoute.")
+            except Exception as e:
+                self.logger.log_warning(f"  TTS 'Je vous écoute' erreur: {e}")
+
+        # On arme la fenêtre d'écoute APRÈS la fin du TTS : arm_listen_window vide la queue
+        # (purge l'écho résiduel) et pose un mute de 1 s pour la réverbération.
         if hasattr(self.voice_fallback, "arm_listen_window"):
             await asyncio.to_thread(self.voice_fallback.arm_listen_window, duration)
 
-        if self.adapter and hasattr(self.adapter, "say"):
-            await asyncio.to_thread(self.adapter.say, "Je vous écoute.", False)
+        # Confirmer à la tablette que le micro est maintenant vraiment actif (après TTS).
+        await self._push_voice_status(
+            status="listening",
+            message=(
+                "Parlez maintenant puis appuyez sur « Envoyer la question »."
+                if manual_send else f"Parlez maintenant ({int(duration)} s)."
+            ),
+            title="Question vocale",
+            websocket=websocket,
+        )
 
         self._voice_request_seq += 1
 

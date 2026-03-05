@@ -165,79 +165,85 @@ class HTTPVoiceFallback:
             except queue.Empty:
                 continue
 
-            if self.config.manual_trigger:
-                now = time.time()
-                if now > self._listen_until:
-                    self._finalize_manual_window()
-                    continue
+            try:
+                self._process_chunk(chunk)
+            except Exception as e:
+                logger.warning(f"Voice fallback: erreur traitement chunk (thread maintenu): {e}")
 
-                if now < self._mute_until:
-                    continue
+    def _process_chunk(self, chunk: bytes):
+        if self.config.manual_trigger:
+            now = time.time()
+            if now > self._listen_until:
+                self._finalize_manual_window()
+                return
 
-                mono_i16 = self._to_mono_i16(chunk)
-                if mono_i16.size == 0:
-                    continue
-                current_len_s = 0.0
-                with self._manual_window_lock:
-                    self._manual_window_samples.append(mono_i16)
-                    self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
-                    self._manual_window_sample_count += mono_i16.size
-                    # En mode manuel long, conserver uniquement les dernières secondes utiles
-                    # pour éviter les transcriptions polluées.
-                    while (
-                        self._manual_window_max_samples > 0
-                        and self._manual_window_samples
-                        and self._manual_window_sample_count > self._manual_window_max_samples
-                    ):
-                        dropped = self._manual_window_samples.pop(0)
-                        self._manual_window_sample_count = max(0, self._manual_window_sample_count - dropped.size)
-                        self._manual_window_len_s = max(
-                            0.0,
-                            self._manual_window_len_s - (dropped.size / float(self.config.input_sample_rate)),
-                        )
-                    current_len_s = self._manual_window_len_s
-
-                # Sécurité: si l'utilisateur parle très longtemps, on force un flush.
-                if current_len_s >= self.config.max_utterance_s:
-                    self._finalize_manual_window()
-                continue
-
-            if time.time() < self._mute_until:
-                continue
+            if now < self._mute_until:
+                return
 
             mono_i16 = self._to_mono_i16(chunk)
             if mono_i16.size == 0:
-                continue
+                return
+            current_len_s = 0.0
+            with self._manual_window_lock:
+                self._manual_window_samples.append(mono_i16)
+                self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+                self._manual_window_sample_count += mono_i16.size
+                # En mode manuel long, conserver uniquement les dernieres secondes utiles
+                # pour eviter les transcriptions polluees.
+                while (
+                    self._manual_window_max_samples > 0
+                    and self._manual_window_samples
+                    and self._manual_window_sample_count > self._manual_window_max_samples
+                ):
+                    dropped = self._manual_window_samples.pop(0)
+                    self._manual_window_sample_count = max(0, self._manual_window_sample_count - dropped.size)
+                    self._manual_window_len_s = max(
+                        0.0,
+                        self._manual_window_len_s - (dropped.size / float(self.config.input_sample_rate)),
+                    )
+                current_len_s = self._manual_window_len_s
 
-            chunk_duration_s = mono_i16.size / float(self.config.input_sample_rate)
-            rms = self._rms_norm(mono_i16)
+            # Securite: si l'utilisateur parle tres longtemps, on force un flush.
+            if current_len_s >= self.config.max_utterance_s:
+                self._finalize_manual_window()
+            return
 
-            if not self._in_speech:
-                self._update_noise_floor(rms)
-                self._push_pre_roll(mono_i16)
-                if rms > self._speech_start_threshold():
-                    self._in_speech = True
-                    self._speech_samples = list(self._pre_roll)
-                    self._speech_samples.append(mono_i16)
-                    self._speech_len_s = sum(a.size for a in self._speech_samples) / float(self.config.input_sample_rate)
-                    self._silence_s = 0.0
-                continue
+        if time.time() < self._mute_until:
+            return
 
-            # En cours de parole
-            self._speech_samples.append(mono_i16)
-            self._speech_len_s += chunk_duration_s
+        mono_i16 = self._to_mono_i16(chunk)
+        if mono_i16.size == 0:
+            return
 
-            if rms < self._speech_end_threshold():
-                self._silence_s += chunk_duration_s
-            else:
+        chunk_duration_s = mono_i16.size / float(self.config.input_sample_rate)
+        rms = self._rms_norm(mono_i16)
+
+        if not self._in_speech:
+            self._update_noise_floor(rms)
+            self._push_pre_roll(mono_i16)
+            if rms > self._speech_start_threshold():
+                self._in_speech = True
+                self._speech_samples = list(self._pre_roll)
+                self._speech_samples.append(mono_i16)
+                self._speech_len_s = sum(a.size for a in self._speech_samples) / float(self.config.input_sample_rate)
                 self._silence_s = 0.0
+            return
 
-            if self._speech_len_s >= self.config.max_utterance_s:
-                self._finalize_utterance()
-                continue
+        # En cours de parole
+        self._speech_samples.append(mono_i16)
+        self._speech_len_s += chunk_duration_s
 
-            if self._silence_s >= self.config.end_silence_s:
-                self._finalize_utterance()
+        if rms < self._speech_end_threshold():
+            self._silence_s += chunk_duration_s
+        else:
+            self._silence_s = 0.0
+
+        if self._speech_len_s >= self.config.max_utterance_s:
+            self._finalize_utterance()
+            return
+
+        if self._silence_s >= self.config.end_silence_s:
+            self._finalize_utterance()
 
     def _reset_vad_state(self):
         self._in_speech = False
