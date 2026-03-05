@@ -285,12 +285,18 @@ class HTTPVoiceFallback:
                 if self._trace:
                     logger.info("Voice trace: transcription vide (rien envoyé au LLM)")
                 return
+            raw_transcript = transcript
             if self._transcript_filter_enabled:
-                transcript = self._sanitize_transcript(transcript)
-                if not transcript:
+                filtered = self._sanitize_transcript(transcript)
+                if filtered:
+                    transcript = filtered
+                else:
                     if self._trace:
-                        logger.info("Voice trace: transcription rejetée (parasite/hors sujet audio)")
-                    return
+                        logger.info(
+                            "Voice trace: transcription marquée parasite, "
+                            "mais conservée pour éviter une perte de question."
+                        )
+                    transcript = raw_transcript
             if self._trace:
                 preview = transcript if len(transcript) <= 180 else (transcript[:177] + "...")
                 logger.info(f"Voice trace: transcription OK: {preview}")

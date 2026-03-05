@@ -204,37 +204,45 @@ class PepperAdapter(RobotAdapter):
         self._audio_pull_detected_rate = None
         self._audio_pull_empty_streak = 0
         self._audio_pull_chunk_count = 0
+        use_subscribe_mode = os.getenv("PEPPER_AUDIO_USE_SUBSCRIBE", "0").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
 
         # Mode 1 (historique): flux custom via ALAudioDevice + socket.
-        try:
-            self._audio_service.setClientPreferences(
-                "PepperAssistant",
-                self.config.sample_rate,
-                self.config.channels_in,
-                0  # Interleaved
-            )
-            self._audio_service.subscribe("PepperAssistant")
-            self._capture_thread = threading.Thread(
-                target=self._audio_capture_loop,
-                daemon=True
-            )
-            self._capture_thread.start()
-            print("[Pepper] Capture audio demarree")
-            return True
-        except Exception as e:
-            print(f"[Pepper] Erreur config audio: {e}")
-            # Mode 2 (fallback): chunks WAV via ALAudioRecorder.
-            if not self._audio_recorder_service:
-                self._is_capturing = False
-                return False
-            self._audio_pull_mode = True
-            self._capture_thread = threading.Thread(
-                target=self._audio_capture_pull_loop,
-                daemon=True
-            )
-            self._capture_thread.start()
+        if use_subscribe_mode:
+            try:
+                self._audio_service.setClientPreferences(
+                    "PepperAssistant",
+                    self.config.sample_rate,
+                    self.config.channels_in,
+                    0  # Interleaved
+                )
+                self._audio_service.subscribe("PepperAssistant")
+                self._capture_thread = threading.Thread(
+                    target=self._audio_capture_loop,
+                    daemon=True
+                )
+                self._capture_thread.start()
+                print("[Pepper] Capture audio demarree")
+                return True
+            except Exception as e:
+                print(f"[Pepper] Erreur config audio: {e}")
+
+        # Mode 2 (fallback): chunks WAV via ALAudioRecorder.
+        if not self._audio_recorder_service:
+            self._is_capturing = False
+            return False
+        self._audio_pull_mode = True
+        self._capture_thread = threading.Thread(
+            target=self._audio_capture_pull_loop,
+            daemon=True
+        )
+        self._capture_thread.start()
+        if use_subscribe_mode:
             print("[Pepper] Capture audio fallback ALAudioRecorder demarree")
-            return True
+        else:
+            print("[Pepper] Capture audio ALAudioRecorder demarree")
+        return True
 
     def _audio_capture_pull_loop(self):
         # Fallback: enregistre de petits WAV puis renvoie PCM brut au callback.

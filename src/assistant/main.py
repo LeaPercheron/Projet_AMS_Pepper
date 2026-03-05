@@ -12,6 +12,7 @@ import time
 import ipaddress
 import re
 import unicodedata
+from collections import deque
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional, Any, Dict, List, Tuple
@@ -860,6 +861,86 @@ class PepperAssistant:
             except Exception:
                 pass
 
+    def _get_current_product_payload_from_context(self) -> Optional[Dict[str, Any]]:
+        # Résout le produit courant depuis le contexte orchestrateur (EAN/nom).
+        ctx: Dict[str, Any] = {}
+        if self.orchestrator and hasattr(self.orchestrator, "get_context"):
+            try:
+                ctx = self.orchestrator.get_context() or {}
+            except Exception:
+                ctx = {}
+
+        ean = str(ctx.get("current_ean") or "").strip()
+        name = str(ctx.get("current_product") or "").strip()
+
+        product = self._find_product_by_ean(ean) if ean else None
+        if product is None and name:
+            product = self._fuzzy_find_product(name)
+
+        if product is None and not (ean or name):
+            return None
+
+        payload = self._build_tablet_product_payload(
+            product,
+            fallback={"ean": ean, "name": name},
+        )
+        if not str(payload.get("name") or "").strip():
+            return None
+        return payload
+
+    async def _fallback_product_reply_without_transcript(self, websocket) -> bool:
+        # En contexte produit, renvoie une réponse utile même si la transcription est vide.
+        if not self._voice_use_product_context:
+            return False
+
+        payload = self._get_current_product_payload_from_context()
+        if not payload:
+            return False
+
+        brand = str(payload.get("brand") or "").strip()
+        name = str(payload.get("name") or "").strip() or "ce produit"
+        usage = str(payload.get("usage") or "").strip()
+        hair_type = str(payload.get("hair_type") or "").strip()
+        product_label = f"{brand} {name}".strip() if brand else name
+
+        details = []
+        if hair_type:
+            details.append(f"Type de cheveux: {hair_type}.")
+        if usage:
+            details.append(f"Usage: {usage}")
+
+        answer = (
+            f"Je n'ai pas bien capté la question, mais vous consultez actuellement {product_label}. "
+            "Reposez votre question à l'oral et je répondrai sur ce shampooing."
+        )
+        if details:
+            answer = f"{answer} {' '.join(details)}"
+
+        try:
+            if self.tablet_server and hasattr(self.tablet_server, "send_qa_answer"):
+                await self.tablet_server.send_qa_answer(
+                    websocket,
+                    "",
+                    answer,
+                    recommendations=[],
+                    context_mode="product",
+                )
+            await self._push_voice_status(
+                status="done",
+                message="Question non captée. Fiche produit affichée.",
+                title="Question vocale",
+                websocket=websocket,
+            )
+            if self.adapter and hasattr(self.adapter, "say"):
+                short_tts = (
+                    f"Je n'ai pas bien entendu. Vous êtes sur {product_label}. "
+                    "Pouvez-vous répéter votre question ?"
+                )
+                await asyncio.to_thread(self.adapter.say, short_tts, False)
+            return True
+        except Exception:
+            return False
+
     async def _capture_scan_images(
         self,
         num_frames: int,
@@ -1062,6 +1143,31 @@ class PepperAssistant:
         payload["scan_confidence"] = confidence
         payload["scan_source"] = scan_source
         return True, ean, payload
+
+    def _build_barcode_payload_from_ean(
+        self,
+        ean: str,
+        scan_source: str = "barcode",
+        confidence: float = 0.0,
+    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        # Construit le payload tablette à partir d'un EAN brut détecté.
+        ean_value = str(ean or "").strip()
+        if not ean_value:
+            return False, None
+        product = self._find_product_by_ean(ean_value)
+        require_in_db = os.getenv("PEPPER_BARCODE_REQUIRE_PRODUCT_IN_DB", "1").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        if require_in_db and not product:
+            self.logger.log_warning(
+                f"  Scan code-barres: EAN {ean_value} détecté mais absent de la base produits, nouvelle tentative."
+            )
+            return False, None
+
+        payload = self._build_tablet_product_payload(product, fallback={"ean": ean_value})
+        payload["scan_confidence"] = float(confidence or 0.0)
+        payload["scan_source"] = scan_source
+        return True, payload
 
     @staticmethod
     def _is_vlm_unavailable_message(message: str) -> bool:
@@ -1308,6 +1414,12 @@ class PepperAssistant:
         if not self.vision_pipeline:
             return False, "", None
 
+        stream_mode = os.getenv("PEPPER_BARCODE_STREAM_MODE", "1").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        if stream_mode:
+            return await self._perform_barcode_scan_stream()
+
         unlimited, attempts = self._resolve_scan_attempts(
             env_key="PEPPER_BARCODE_ATTEMPTS",
             default_attempts=20,
@@ -1365,6 +1477,106 @@ class PepperAssistant:
             await asyncio.sleep(between_attempt_s)
 
         self.logger.log_warning("  Scan code-barres: échec, aucun EAN détecté après toutes les tentatives")
+        return False, "", None
+
+    async def _perform_barcode_scan_stream(self) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+        # Mode quasi-stream: analyse continue frame par frame.
+        if not self.vision_pipeline:
+            return False, "", None
+
+        base_attempts = max(1, int(os.getenv("PEPPER_BARCODE_ATTEMPTS", "20") or 20))
+        base_frames = max(1, int(os.getenv("PEPPER_BARCODE_FRAMES", "4") or 4))
+        default_stream_frames = max(40, base_attempts * base_frames)
+        unlimited, max_frames = self._resolve_scan_attempts(
+            env_key="PEPPER_BARCODE_STREAM_FRAMES",
+            default_attempts=default_stream_frames,
+            scan_name="Scan code-barres stream",
+            min_attempts=max(20, int(os.getenv("PEPPER_BARCODE_MIN_ATTEMPTS", "3") or 3)),
+        )
+
+        frame_interval_s = max(
+            0.05,
+            float(os.getenv("PEPPER_BARCODE_STREAM_FRAME_INTERVAL", "0.08") or 0.08),
+        )
+        window_size = max(1, int(os.getenv("PEPPER_BARCODE_STREAM_WINDOW", "3") or 3))
+        deep_check_every = max(
+            1,
+            int(os.getenv("PEPPER_BARCODE_STREAM_DEEP_CHECK_EVERY", "4") or 4),
+        )
+        log_every = max(1, int(os.getenv("PEPPER_BARCODE_STREAM_LOG_EVERY", "5") or 5))
+
+        detector = getattr(getattr(self.vision_pipeline, "pipeline", None), "barcode_detector", None)
+        rolling_images = deque(maxlen=window_size)
+
+        if unlimited:
+            self.logger.log_info(
+                "  Scan code-barres stream: démarrage (frames illimitées, "
+                f"fenêtre={window_size}, vérif approfondie toutes les {deep_check_every} frames)"
+            )
+        else:
+            self.logger.log_info(
+                "  Scan code-barres stream: démarrage "
+                f"({max_frames} frames max, fenêtre={window_size}, "
+                f"vérif approfondie toutes les {deep_check_every} frames)"
+            )
+
+        frame_idx = 0
+        while True:
+            frame_idx += 1
+            if not unlimited and frame_idx > max_frames:
+                break
+
+            label_suffix = f"{frame_idx}/∞" if unlimited else f"{frame_idx}/{max_frames}"
+            scan_label = f"Scan code-barres stream frame {label_suffix}"
+            images = await self._capture_scan_images(
+                num_frames=1,
+                interval_s=frame_interval_s,
+                scan_label=scan_label,
+                log_frames=False,
+            )
+
+            if not images:
+                if frame_idx % log_every == 0:
+                    self.logger.log_info(f"  {scan_label}: aucune image exploitable")
+                await asyncio.sleep(frame_interval_s)
+                continue
+
+            image = images[0]
+            rolling_images.append(image)
+            if frame_idx <= 3 or frame_idx % log_every == 0:
+                self.logger.log_info(
+                    f"  {scan_label}: image reçue ({image.width}x{image.height}), "
+                    f"fenêtre={len(rolling_images)}"
+                )
+
+            # 1) Détection rapide locale (pyzbar) sur la frame courante.
+            fast_eans: List[str] = []
+            if detector and hasattr(detector, "detect_single"):
+                try:
+                    fast_eans = await asyncio.to_thread(detector.detect_single, image)
+                except Exception:
+                    fast_eans = []
+
+            for ean in fast_eans:
+                ok_payload, payload = self._build_barcode_payload_from_ean(
+                    ean=ean,
+                    scan_source="pyzbar_stream",
+                    confidence=0.95,
+                )
+                if ok_payload:
+                    self.logger.log_info(f"  {scan_label}: succès rapide, EAN détecté {ean}")
+                    return True, str(ean), payload
+
+            # 2) Vérification approfondie périodique (OpenAI Vision + pyzbar multi-images).
+            if frame_idx % deep_check_every == 0:
+                ok, ean, payload = await self._detect_barcode_from_images(list(rolling_images))
+                if ok:
+                    self.logger.log_info(f"  {scan_label}: succès approfondi, EAN détecté {ean}")
+                    return True, ean, payload
+
+            await asyncio.sleep(frame_interval_s)
+
+        self.logger.log_warning("  Scan code-barres stream: échec, aucun EAN détecté après toutes les frames")
         return False, "", None
 
     async def _run_barcode_scan_sequence(self, websocket, intro_message: str = "") -> bool:
@@ -1719,6 +1931,9 @@ class PepperAssistant:
         if self._voice_transcript_seq > transcript_seq_before:
             return
         if not self.tablet_server:
+            return
+
+        if await self._fallback_product_reply_without_transcript(websocket):
             return
 
         await self._push_voice_status(
