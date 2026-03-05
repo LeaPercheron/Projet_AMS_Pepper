@@ -460,6 +460,7 @@ class PepperAssistant:
                 context_provider=_voice_context_provider,
                 on_transcript=self._on_voice_fallback_transcript,
                 on_answer=self._on_voice_fallback_answer,
+                on_no_speech=self._on_voice_fallback_no_speech,
                 config=vf_config
             )
             self.voice_fallback.start()
@@ -581,6 +582,18 @@ class PepperAssistant:
                 )
             except Exception:
                 pass
+
+    def _on_voice_fallback_no_speech(self):
+        # Callback thread-safe: aucune parole détectée ou transcription vide.
+        # Incrémente le seq pour que _notify_voice_no_transcript_after_stop ne double-fire pas.
+        self._voice_transcript_seq += 1
+        if self._voice_trace:
+            self.logger.log_info("  Voice trace: aucune parole détectée après envoi → notification tablette immédiate")
+        self._push_voice_status_threadsafe(
+            "timeout",
+            "Aucune question captée. Rapprochez-vous du robot et réessayez.",
+            "Question vocale",
+        )
 
     def _on_voice_fallback_answer(self, transcript: str, answer: str):
         # Callback thread-safe: publier la réponse sur tablette (si connectée).

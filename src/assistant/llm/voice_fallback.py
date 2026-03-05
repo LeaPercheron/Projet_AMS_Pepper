@@ -57,6 +57,7 @@ class HTTPVoiceFallback:
         context_provider: Optional[Callable[[], Dict[str, Any]]] = None,
         on_transcript: Optional[Callable[[str], None]] = None,
         on_answer: Optional[Callable[[str, str], None]] = None,
+        on_no_speech: Optional[Callable[[], None]] = None,
         config: Optional[VoiceFallbackConfig] = None,
     ):
         self.config = config or VoiceFallbackConfig()
@@ -66,6 +67,7 @@ class HTTPVoiceFallback:
         self._context_provider = context_provider or (lambda: {})
         self._on_transcript = on_transcript
         self._on_answer = on_answer
+        self._on_no_speech = on_no_speech
 
         self._queue: "queue.Queue[bytes]" = queue.Queue(maxsize=self.config.queue_max_chunks)
         self._stop_event = threading.Event()
@@ -273,6 +275,12 @@ class HTTPVoiceFallback:
 
     def _finalize_samples(self, samples: np.ndarray, utterance_s: float):
         if utterance_s < self.config.min_utterance_s:
+            if self._trace:
+                logger.info(
+                    f"Voice trace: segment trop court ({utterance_s:.2f}s < {self.config.min_utterance_s}s), ignoré"
+                )
+            if self._on_no_speech:
+                self._on_no_speech()
             return
         if samples.size == 0:
             return
@@ -290,6 +298,8 @@ class HTTPVoiceFallback:
             if not transcript:
                 if self._trace:
                     logger.info("Voice trace: transcription vide (rien envoyé au LLM)")
+                if self._on_no_speech:
+                    self._on_no_speech()
                 return
             raw_transcript = transcript
             if self._transcript_filter_enabled:
