@@ -1918,6 +1918,13 @@ class PepperAssistant:
 
     async def _handle_tablet_stop_voice_question(self, websocket, data):
         # Arrêt manuel de la fenêtre d'écoute vocale et envoi immédiat.
+        vf = self.voice_fallback
+        buf_s = 0.0
+        if vf and hasattr(vf, "_manual_window_len_s"):
+            buf_s = float(getattr(vf, "_manual_window_len_s", 0.0) or 0.0)
+        self.logger.log_info(
+            f"  Tablette: stop_voice_question reçu (buffer_audio={buf_s:.2f}s)"
+        )
         if self._is_realtime_connected():
             await self._push_voice_status(
                 status="processing",
