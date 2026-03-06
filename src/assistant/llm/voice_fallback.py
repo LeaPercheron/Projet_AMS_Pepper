@@ -263,6 +263,10 @@ class HTTPVoiceFallback:
     def _finalize_manual_window(self):
         with self._manual_window_lock:
             if not self._manual_window_samples:
+                logger.warning(
+                    "Voice fallback: finalize appelé mais aucun chunk audio accumulé "
+                    "(buffer vide). Vérifier la capture audio du robot (PEPPER_AUDIO_DEBUG=1)."
+                )
                 return
             utterance_s = self._manual_window_len_s
             samples = self._concat_samples(self._manual_window_samples)

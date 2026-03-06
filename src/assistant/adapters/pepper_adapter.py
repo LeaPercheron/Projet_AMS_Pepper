@@ -251,8 +251,10 @@ class PepperAdapter(RobotAdapter):
                 wav_bytes = self._pull_audio_chunk_wav(duration_s=0.6)
                 if not wav_bytes:
                     self._audio_pull_empty_streak += 1
-                    if self._audio_pull_empty_streak % 8 == 0:
-                        print("[Pepper] Avertissement: aucun chunk audio récupéré (fallback recorder).")
+                    if self._audio_pull_empty_streak == 1:
+                        print("[Pepper] Avertissement: premier chunk audio vide (WAV non lu depuis le robot).")
+                    elif self._audio_pull_empty_streak % 10 == 0:
+                        print(f"[Pepper] Avertissement: {self._audio_pull_empty_streak} chunks audio vides consécutifs (WAV non lu depuis le robot).")
                     time.sleep(0.2)
                     continue
                 self._audio_pull_empty_streak = 0
