@@ -15,6 +15,34 @@ from typing import Optional, Callable, List
 from .base import RobotAdapter, AdapterConfig, LEDColor
 
 
+class _ALAudioDeviceProxy:
+    """
+    Service enregistré dans la session qi locale pour recevoir
+    les callbacks ALAudioDevice.processRemote() depuis Pepper.
+    Évite entièrement le transfert de fichiers WAV et les sockets TCP.
+    NAOqi appelle processRemote() via RPC qi pour chaque buffer audio.
+    """
+
+    def __init__(self, callback: Callable[[bytes], None], adapter: "PepperAdapter"):
+        self._callback = callback
+        self._adapter = adapter
+
+    def processRemote(self, nbChannels: int, nbSamplesPerChan: int, timestamp, inputBuffer):
+        try:
+            pcm = bytes(bytearray(inputBuffer))
+        except Exception:
+            try:
+                pcm = bytes(inputBuffer)
+            except Exception:
+                return
+        if not pcm:
+            return
+        # Mettre à jour le format détecté (utilisé par voice_fallback).
+        self._adapter._audio_pull_detected_channels = int(nbChannels or 1)
+        if self._callback:
+            self._callback(pcm)
+
+
 class PepperAdapter(RobotAdapter):
     # Adaptateur pour robot Pepper reel.
 
@@ -62,6 +90,8 @@ class PepperAdapter(RobotAdapter):
         self._audio_pull_empty_streak = 0
         self._audio_pull_chunk_count = 0
         self._audio_callback: Optional[Callable] = None
+        self._audio_proxy: Optional[_ALAudioDeviceProxy] = None
+        self._audio_proxy_service_id: Optional[int] = None
         self._video_callback: Optional[Callable] = None
         self._head_frozen = False
         self._awareness_was_enabled: Optional[bool] = None
@@ -204,29 +234,39 @@ class PepperAdapter(RobotAdapter):
         self._audio_pull_detected_rate = None
         self._audio_pull_empty_streak = 0
         self._audio_pull_chunk_count = 0
-        use_subscribe_mode = os.getenv("PEPPER_AUDIO_USE_SUBSCRIBE", "0").strip().lower() in {
+        # Par défaut: mode qi registerService (streaming direct, sans WAV).
+        # Mettre PEPPER_AUDIO_USE_SUBSCRIBE=0 pour forcer le mode ALAudioRecorder pull.
+        use_subscribe_mode = os.getenv("PEPPER_AUDIO_USE_SUBSCRIBE", "1").strip().lower() in {
             "1", "true", "yes", "on"
         }
 
-        # Mode 1 (historique): flux custom via ALAudioDevice + socket.
+        # Mode 1: streaming direct via qi.Session.registerService() + ALAudioDevice.subscribe().
+        # NAOqi appelle processRemote() dans ce processus Python, sans fichier WAV ni socket TCP.
         if use_subscribe_mode:
             try:
-                self._audio_service.setClientPreferences(
-                    "PepperAssistant",
-                    self.config.sample_rate,
-                    self.config.channels_in,
-                    0  # Interleaved
-                )
-                self._audio_service.subscribe("PepperAssistant")
-                self._capture_thread = threading.Thread(
-                    target=self._audio_capture_loop,
-                    daemon=True
-                )
-                self._capture_thread.start()
-                print("[Pepper] Capture audio demarree")
+                front_only_qi = os.getenv("PEPPER_AUDIO_RECORDER_FRONT_ONLY", "1").strip().lower() in {
+                    "1", "true", "yes", "on"
+                }
+                rate = 16000 if front_only_qi else int(self.config.sample_rate or 48000)
+                proxy = _ALAudioDeviceProxy(callback, self)
+                svc_id = self._session.registerService("PepperAssistantAudio", proxy)
+                self._audio_proxy = proxy
+                self._audio_proxy_service_id = svc_id
+                self._audio_pull_detected_rate = rate
+                # channels=0 → tous les canaux Pepper (4 mics), traitement mono dans voice_fallback.
+                self._audio_service.setClientPreferences("PepperAssistantAudio", rate, 0, 0)
+                self._audio_service.subscribe("PepperAssistantAudio")
+                print(f"[Pepper] Capture audio qi (registerService) demarree ({rate} Hz, 4 canaux)")
                 return True
             except Exception as e:
-                print(f"[Pepper] Erreur config audio: {e}")
+                print(f"[Pepper] Erreur capture audio qi registerService: {e} — fallback ALAudioRecorder")
+                if self._audio_proxy_service_id is not None:
+                    try:
+                        self._session.unregisterService(self._audio_proxy_service_id)
+                    except Exception:
+                        pass
+                    self._audio_proxy_service_id = None
+                self._audio_proxy = None
 
         # Mode 2 (fallback): chunks WAV via ALAudioRecorder.
         if not self._audio_recorder_service:
@@ -509,10 +549,25 @@ class PepperAdapter(RobotAdapter):
         # Arrete la capture audio.
         self._is_capturing = False
 
-        if self._audio_service and not self._audio_pull_mode:
+        # Nettoyage mode qi registerService.
+        if self._audio_proxy_service_id is not None:
+            if self._audio_service:
+                try:
+                    self._audio_service.unsubscribe("PepperAssistantAudio")
+                except Exception:
+                    pass
+            if self._session:
+                try:
+                    self._session.unregisterService(self._audio_proxy_service_id)
+                except Exception:
+                    pass
+            self._audio_proxy_service_id = None
+        self._audio_proxy = None
+
+        if self._audio_service and not self._audio_pull_mode and self._audio_proxy_service_id is None:
             try:
                 self._audio_service.unsubscribe("PepperAssistant")
-            except:
+            except Exception:
                 pass
         if self._audio_pull_mode and self._audio_recorder_service:
             try:
