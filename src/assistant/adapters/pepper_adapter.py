@@ -253,8 +253,8 @@ class PepperAdapter(RobotAdapter):
                 self._audio_proxy = proxy
                 self._audio_proxy_service_id = svc_id
                 self._audio_pull_detected_rate = rate
-                # channels=0 → tous les canaux Pepper (4 mics), traitement mono dans voice_fallback.
-                self._audio_service.setClientPreferences("PepperAssistantAudio", rate, 0, 0)
+                # 4 canaux interleaved, identique à capture.py (setClientPreferences(name, rate, 4, 0)).
+                self._audio_service.setClientPreferences("PepperAssistantAudio", rate, 4, 0)
                 self._audio_service.subscribe("PepperAssistantAudio")
                 print(f"[Pepper] Capture audio qi (registerService) demarree ({rate} Hz, 4 canaux)")
                 return True
