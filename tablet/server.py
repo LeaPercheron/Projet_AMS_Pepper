@@ -386,12 +386,21 @@ class TabletServer:
         else:
             await self._send_to_client(websocket_or_broadcast, message)
 
-    async def send_qa_answer(self, websocket_or_broadcast, question: str, answer: str):
+    async def send_qa_answer(
+        self,
+        websocket_or_broadcast,
+        question: str,
+        answer: str,
+        recommendations: Optional[list] = None,
+        context_mode: str = "general",
+    ):
         # Envoie une réponse au mode question fallback.
         message = {
             "type": MessageType.QA_ANSWER.value,
             "question": question,
-            "answer": answer
+            "answer": answer,
+            "recommendations": recommendations or [],
+            "context_mode": str(context_mode or "general"),
         }
         if websocket_or_broadcast is True:
             await self.broadcast(message)

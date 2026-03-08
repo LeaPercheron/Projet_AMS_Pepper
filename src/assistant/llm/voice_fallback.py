@@ -37,6 +37,7 @@ class VoiceFallbackConfig:
     language: str = "fr"
     manual_trigger: bool = False
     listen_window_s: float = 8.0
+    manual_buffer_s: float = 240.0
     mono_channel_index: int = 2
     input_gain: float = 1.0
     local_stt_enabled: bool = True
@@ -81,9 +82,19 @@ class HTTPVoiceFallback:
         self._listen_until = 0.0 if self.config.manual_trigger else float("inf")
         self._manual_window_samples = []
         self._manual_window_len_s = 0.0
+        self._manual_window_sample_count = 0
+        self._manual_window_lock = threading.Lock()
+        manual_buffer_s = float(self.config.manual_buffer_s or 0.0)
+        self._manual_window_max_samples = int(
+            max(0.0, manual_buffer_s) * self.config.input_sample_rate
+        )
         self._local_stt_warned_unavailable = False
         self._local_stt_warned_model = False
         self._local_stt_path = self._resolve_local_stt_path()
+        self._trace = os.getenv("PEPPER_VOICE_TRACE", "1").strip().lower() in {"1", "true", "yes", "on"}
+        self._transcript_filter_enabled = os.getenv("PEPPER_VOICE_TRANSCRIPT_FILTER", "0").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -99,8 +110,10 @@ class HTTPVoiceFallback:
             self._thread = None
         self._drain_queue()
         self._reset_vad_state()
-        self._manual_window_samples = []
-        self._manual_window_len_s = 0.0
+        with self._manual_window_lock:
+            self._manual_window_samples = []
+            self._manual_window_len_s = 0.0
+            self._manual_window_sample_count = 0
 
     def ingest(self, audio_bytes: bytes):
         if not audio_bytes or self._stop_event.is_set():
@@ -120,13 +133,25 @@ class HTTPVoiceFallback:
         if not self.config.manual_trigger:
             return
         window = float(duration_s or self.config.listen_window_s)
-        self._listen_until = time.time() + max(0.5, window)
+        with self._manual_window_lock:
+            self._listen_until = time.time() + max(0.5, window)
+            # Ignore la phrase robot "Je vous écoute" juste après le clic.
+            self._mute_until = time.time() + 1.0
+            self._manual_window_samples = []
+            self._manual_window_len_s = 0.0
+            self._manual_window_sample_count = 0
         # Ignore la phrase robot "Je vous écoute" juste après le clic.
-        self._mute_until = time.time() + 1.0
         self._reset_vad_state()
-        self._manual_window_samples = []
-        self._manual_window_len_s = 0.0
         self._drain_queue(max_items=128)
+
+    def finalize_listen_window(self):
+        # Force la fin de fenêtre manuelle et déclenche l'analyse immédiatement.
+        if not self.config.manual_trigger:
+            return
+        with self._manual_window_lock:
+            self._listen_until = 0.0
+            self._mute_until = 0.0
+        self._finalize_manual_window()
 
     def is_listen_window_open(self) -> bool:
         if not self.config.manual_trigger:
@@ -152,11 +177,28 @@ class HTTPVoiceFallback:
                 mono_i16 = self._to_mono_i16(chunk)
                 if mono_i16.size == 0:
                     continue
-                self._manual_window_samples.append(mono_i16)
-                self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+                current_len_s = 0.0
+                with self._manual_window_lock:
+                    self._manual_window_samples.append(mono_i16)
+                    self._manual_window_len_s += mono_i16.size / float(self.config.input_sample_rate)
+                    self._manual_window_sample_count += mono_i16.size
+                    # En mode manuel long, conserver uniquement les dernières secondes utiles
+                    # pour éviter les transcriptions polluées.
+                    while (
+                        self._manual_window_max_samples > 0
+                        and self._manual_window_samples
+                        and self._manual_window_sample_count > self._manual_window_max_samples
+                    ):
+                        dropped = self._manual_window_samples.pop(0)
+                        self._manual_window_sample_count = max(0, self._manual_window_sample_count - dropped.size)
+                        self._manual_window_len_s = max(
+                            0.0,
+                            self._manual_window_len_s - (dropped.size / float(self.config.input_sample_rate)),
+                        )
+                    current_len_s = self._manual_window_len_s
 
                 # Sécurité: si l'utilisateur parle très longtemps, on force un flush.
-                if self._manual_window_len_s >= self.config.max_utterance_s:
+                if current_len_s >= self.config.max_utterance_s:
                     self._finalize_manual_window()
                 continue
 
@@ -211,12 +253,16 @@ class HTTPVoiceFallback:
         self._finalize_samples(samples, utterance_s)
 
     def _finalize_manual_window(self):
-        if not self._manual_window_samples:
+        with self._manual_window_lock:
+            if not self._manual_window_samples:
+                return
+            utterance_s = self._manual_window_len_s
+            samples = self._concat_samples(self._manual_window_samples)
+            self._manual_window_samples = []
+            self._manual_window_len_s = 0.0
+            self._manual_window_sample_count = 0
+        if samples.size == 0:
             return
-        utterance_s = self._manual_window_len_s
-        samples = self._concat_samples(self._manual_window_samples)
-        self._manual_window_samples = []
-        self._manual_window_len_s = 0.0
         self._finalize_samples(samples, utterance_s)
 
     def _finalize_samples(self, samples: np.ndarray, utterance_s: float):
@@ -229,13 +275,40 @@ class HTTPVoiceFallback:
                 self._resample_i16(samples, self.config.input_sample_rate, self.config.target_sample_rate),
                 sample_rate=self.config.target_sample_rate
             )
+            if self._trace:
+                logger.info(
+                    "Voice trace: segment audio prêt "
+                    f"(durée={utterance_s:.2f}s, bytes={len(wav_bytes)}, stt={self.config.transcription_model})"
+                )
             transcript = self._transcribe_wav(wav_bytes).strip()
             if not transcript:
+                if self._trace:
+                    logger.info("Voice trace: transcription vide (rien envoyé au LLM)")
                 return
+            raw_transcript = transcript
+            if self._transcript_filter_enabled:
+                filtered = self._sanitize_transcript(transcript)
+                if filtered:
+                    transcript = filtered
+                else:
+                    if self._trace:
+                        logger.info(
+                            "Voice trace: transcription marquée parasite, "
+                            "mais conservée pour éviter une perte de question."
+                        )
+                    transcript = raw_transcript
+            if self._trace:
+                preview = transcript if len(transcript) <= 180 else (transcript[:177] + "...")
+                logger.info(f"Voice trace: transcription OK: {preview}")
             if self._on_transcript:
                 self._on_transcript(transcript)
 
             context = self._context_provider() if self._context_provider else {}
+            if self._trace:
+                logger.info(
+                    "Voice trace: envoi vers OpenAI HTTP fallback "
+                    f"(context_product={'on' if bool((context or {}).get('current_product')) else 'off'})"
+                )
             try:
                 answer = (self._text_client.ask(transcript, context) or "").strip()
             except Exception as e:
@@ -245,7 +318,12 @@ class HTTPVoiceFallback:
                 else:
                     return
             if not answer:
+                if self._trace:
+                    logger.info("Voice trace: réponse vide depuis OpenAI HTTP fallback")
                 return
+            if self._trace:
+                preview = answer if len(answer) <= 220 else (answer[:217] + "...")
+                logger.info(f"Voice trace: réponse texte OK: {preview}")
             if self._on_answer:
                 self._on_answer(transcript, answer)
 
@@ -262,10 +340,15 @@ class HTTPVoiceFallback:
         try:
             bio = io.BytesIO(wav_bytes)
             bio.name = "pepper_fallback.wav"
+            stt_prompt = (
+                os.getenv("OPENAI_HTTP_TRANSCRIPTION_PROMPT", "").strip()
+                or "Question vocale en français sur les cheveux et les shampooings."
+            )
             out = self._openai.audio.transcriptions.create(
                 model=self.config.transcription_model,
                 file=bio,
-                language=self.config.language
+                language=self.config.language,
+                prompt=stt_prompt,
             )
             return getattr(out, "text", "") or ""
         except Exception as e:
@@ -275,6 +358,22 @@ class HTTPVoiceFallback:
                     logger.warning(f"OpenAI transcription indisponible ({e}); STT local utilisé.")
                     return local_text
             raise
+
+    @staticmethod
+    def _sanitize_transcript(text: str) -> str:
+        value = str(text or "").strip()
+        if not value:
+            return ""
+        lowered = value.lower()
+        noise_markers = (
+            "sous-titres réalisés",
+            "subtitles by",
+            "amara.org",
+            "la communauté d'amara",
+        )
+        if any(marker in lowered for marker in noise_markers):
+            return ""
+        return value
 
     def _resolve_local_stt_path(self) -> str:
         explicit = (self.config.local_stt_path or "").strip()

@@ -11,9 +11,9 @@
     {
       "id": "AVENE-TOLERANCE-001",
       "ean13": "3282770200249",
-      "name": "Tolérance Extrême Shampooing",
+      "name": "Tolérance Extrême shampoing",
       "brand": "Avène",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cuir chevelu hypersensible",
         "Cuir chevelu réactif"
@@ -21,7 +21,7 @@
       "price": 13.5,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing ultra-apaisant pour cuir chevelu hypersensible.",
+      "usage": "shampoing ultra-apaisant pour cuir chevelu hypersensible.",
       "instructions": "Appliquer sur cheveux mouillés, masser délicatement, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -54,9 +54,9 @@
     {
       "id": "BIODERMA-NODEDS-001",
       "ean13": "3401572183283",
-      "name": "Nodé DS+ Shampooing Antipelliculaire",
+      "name": "Nodé DS+ shampoing Antipelliculaire",
       "brand": "Bioderma",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Pellicules",
         "Cuir chevelu irrité"
@@ -64,7 +64,7 @@
       "price": 14.5,
       "currency": "EUR",
       "volume": "125ml",
-      "usage": "Shampooing traitant antipelliculaire intense.",
+      "usage": "shampoing traitant antipelliculaire intense.",
       "instructions": "Appliquer 3x/semaine, masser, laisser 3 min, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -98,9 +98,9 @@
     {
       "id": "BIODERMA-NODE-001",
       "ean13": "3401572183276",
-      "name": "Nodé Shampooing Fluide Non-Détergent",
+      "name": "Nodé shampoing Fluide Non-Détergent",
       "brand": "Bioderma",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Tous types de cheveux",
         "Usage quotidien"
@@ -108,7 +108,7 @@
       "price": 13.9,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing ultra-doux respectant l'équilibre du cuir chevelu.",
+      "usage": "shampoing ultra-doux respectant l'équilibre du cuir chevelu.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Usage quotidien.",
       "precautions": [
         "Usage externe uniquement"
@@ -141,9 +141,9 @@
     {
       "id": "DUCRAY-ELUTION-001",
       "ean13": "3282779328258",
-      "name": "Elution Shampooing Rééquilibrant",
+      "name": "Elution shampoing Rééquilibrant",
       "brand": "Ducray",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cuir chevelu sensible",
         "Après traitement antipelliculaire"
@@ -151,7 +151,7 @@
       "price": 13.5,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing doux pour rééquilibrer le cuir chevelu après traitement.",
+      "usage": "shampoing doux pour rééquilibrer le cuir chevelu après traitement.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -183,9 +183,9 @@
     {
       "id": "DUCRAY-EXTRADOUX-001",
       "ean13": "3282779328241",
-      "name": "Extra-Doux Shampooing Dermo-Protecteur",
+      "name": "Extra-Doux shampoing Dermo-Protecteur",
       "brand": "Ducray",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cuir chevelu délicat",
         "Tous types de cheveux"
@@ -193,7 +193,7 @@
       "price": 11.5,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing dermo-protecteur pour cuir chevelu délicat.",
+      "usage": "shampoing dermo-protecteur pour cuir chevelu délicat.",
       "instructions": "Appliquer sur cheveux mouillés, faire mousser, rincer. Usage fréquent.",
       "precautions": [
         "Usage externe uniquement"
@@ -231,9 +231,9 @@
     {
       "id": "DUCRAY-KELUAL-001",
       "ean13": "3282779328265",
-      "name": "Kelual DS Shampooing Traitant",
+      "name": "Kelual DS shampoing Traitant",
       "brand": "Ducray",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Pellicules sévères",
         "Dermite séborrhéique"
@@ -241,7 +241,7 @@
       "price": 14.9,
       "currency": "EUR",
       "volume": "100ml",
-      "usage": "Shampooing traitant pour états pelliculaires sévères.",
+      "usage": "shampoing traitant pour états pelliculaires sévères.",
       "instructions": "Appliquer 2-3x/semaine, masser, laisser poser 3 min, rincer.",
       "precautions": [
         "Usage externe uniquement",
@@ -288,7 +288,7 @@
       "currency": "EUR",
       "volume": "300ml",
       "usage": "Masque réparateur intense pour cheveux fragilisés.",
-      "instructions": "Appliquer sur longueurs après shampooing, laisser 3-5 min, rincer.",
+      "instructions": "Appliquer sur longueurs après shampoing, laisser 3-5 min, rincer.",
       "precautions": [
         "Usage externe uniquement"
       ],
@@ -323,9 +323,9 @@
     {
       "id": "GARNIER-MIEL-001",
       "ean13": "3600542154253",
-      "name": "Ultra Doux Trésors de Miel Shampooing",
+      "name": "Ultra Doux Trésors de Miel shampoing",
       "brand": "Garnier",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux fragiles",
         "Cheveux cassants",
@@ -334,7 +334,7 @@
       "price": 4.5,
       "currency": "EUR",
       "volume": "300ml",
-      "usage": "Shampooing réparateur pour cheveux fragiles et cassants.",
+      "usage": "shampoing réparateur pour cheveux fragiles et cassants.",
       "instructions": "Appliquer sur cheveux mouillés, faire mousser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -375,9 +375,9 @@
     {
       "id": "HEADSHOULDERS-CLASSIC-001",
       "ean13": "8700216156950",
-      "name": "Shampooing Antipelliculaire Classic",
+      "name": "shampoing Antipelliculaire Classic",
       "brand": "Head & Shoulders",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Tous types de cheveux",
         "Pellicules"
@@ -385,7 +385,7 @@
       "price": 4.85,
       "currency": "EUR",
       "volume": "250ml",
-      "usage": "Shampooing antipelliculaire pour le lavage quotidien, aide à maintenir l'équilibre du cuir chevelu.",
+      "usage": "shampoing antipelliculaire pour le lavage quotidien, aide à maintenir l'équilibre du cuir chevelu.",
       "instructions": "Appliquer sur cheveux mouillés, masser le cuir chevelu puis rincer abondamment.",
       "precautions": [
         "Usage externe uniquement",
@@ -428,17 +428,17 @@
     {
       "id": "KLORANE-APRES-MANGUE-001",
       "ean13": "3282770149302",
-      "name": "Après-Shampooing Nutritif à la Mangue",
+      "name": "Après-shampoing Nutritif à la Mangue",
       "brand": "Klorane",
-      "category": "Après-shampooing",
+      "category": "Après-shampoing",
       "hair_type": [
         "Cheveux secs"
       ],
       "price": 11.9,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Après-shampooing nourrissant pour cheveux secs.",
-      "instructions": "Appliquer sur longueurs après shampooing, laisser 2 min, rincer.",
+      "usage": "Après-shampoing nourrissant pour cheveux secs.",
+      "instructions": "Appliquer sur longueurs après shampoing, laisser 2 min, rincer.",
       "precautions": [
         "Usage externe uniquement"
       ],
@@ -469,9 +469,9 @@
     {
       "id": "KLORANE-PIVOINE-001",
       "ean13": "3282770149296",
-      "name": "Shampooing Apaisant à la Pivoine",
+      "name": "shampoing Apaisant à la Pivoine",
       "brand": "Klorane",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cuir chevelu sensible",
         "Cuir chevelu irrité"
@@ -479,7 +479,7 @@
       "price": 12.9,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing apaisant pour cuir chevelu sensible et irrité.",
+      "usage": "shampoing apaisant pour cuir chevelu sensible et irrité.",
       "instructions": "Appliquer sur cheveux mouillés, masser délicatement, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -512,9 +512,9 @@
     {
       "id": "KLORANE-CAMOMILLE-001",
       "ean13": "3282770149272",
-      "name": "Shampooing Illuminateur à la Camomille",
+      "name": "shampoing Illuminateur à la Camomille",
       "brand": "Klorane",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux blonds",
         "Cheveux méchés"
@@ -522,7 +522,7 @@
       "price": 12.9,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing éclaircissant pour raviver les reflets dorés des cheveux blonds naturels, méchés ou colorés.",
+      "usage": "shampoing éclaircissant pour raviver les reflets dorés des cheveux blonds naturels, méchés ou colorés.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer abondamment.",
       "precautions": [
         "Usage externe uniquement",
@@ -556,9 +556,9 @@
     {
       "id": "KLORANE-ORTIE-001",
       "ean13": "3282770149289",
-      "name": "Shampooing Séboréducteur à l'Ortie",
+      "name": "shampoing Séboréducteur à l'Ortie",
       "brand": "Klorane",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux gras",
         "Cuir chevelu gras"
@@ -566,7 +566,7 @@
       "price": 12.9,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing régulateur pour cheveux à tendance grasse.",
+      "usage": "shampoing régulateur pour cheveux à tendance grasse.",
       "instructions": "Appliquer sur cheveux mouillés, masser le cuir chevelu, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -599,9 +599,9 @@
     {
       "id": "KLORANE-EXTRADOUX-400-001",
       "ean13": "3282770145373",
-      "name": "Shampooing à l'Avoine Extra-Doux",
+      "name": "shampoing à l'Avoine Extra-Doux",
       "brand": "Klorane",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Tous types de cheveux",
         "Cuir chevelu sensible"
@@ -609,7 +609,7 @@
       "price": 12.2,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing extra-doux à usage fréquent pour toute la famille.",
+      "usage": "shampoing extra-doux à usage fréquent pour toute la famille.",
       "instructions": "Appliquer sur cheveux et cuir chevelu mouillés, faire mousser puis rincer.",
       "precautions": [
         "Usage externe uniquement",
@@ -648,9 +648,9 @@
     {
       "id": "LOREAL-ARGININE-001",
       "ean13": "3600524029548",
-      "name": "Elsève Arginine Resist X3 Shampooing",
+      "name": "Elsève Arginine Resist X3 shampoing",
       "brand": "L'Oréal Paris",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux fragiles",
         "Cheveux cassants"
@@ -658,7 +658,7 @@
       "price": 5.9,
       "currency": "EUR",
       "volume": "250ml",
-      "usage": "Shampooing fortifiant pour cheveux fragilisés par les agressions quotidiennes.",
+      "usage": "shampoing fortifiant pour cheveux fragilisés par les agressions quotidiennes.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -690,9 +690,9 @@
     {
       "id": "LOREAL-COLOR-VIVE-001",
       "ean13": "3600524029555",
-      "name": "Elsève Color-Vive Shampooing",
+      "name": "Elsève Color-Vive shampoing",
       "brand": "L'Oréal Paris",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux colorés",
         "Cheveux méchés"
@@ -700,7 +700,7 @@
       "price": 5.9,
       "currency": "EUR",
       "volume": "250ml",
-      "usage": "Shampooing protecteur de couleur pour cheveux colorés ou méchés.",
+      "usage": "shampoing protecteur de couleur pour cheveux colorés ou méchés.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -734,7 +734,7 @@
       "ean13": "3600524029562",
       "name": "Elsève Hyaluron Repulp Démêlant",
       "brand": "L'Oréal Paris",
-      "category": "Après-shampooing",
+      "category": "Après-shampoing",
       "hair_type": [
         "Cheveux déshydratés"
       ],
@@ -771,9 +771,9 @@
     {
       "id": "LOREAL-HYALURON-001",
       "ean13": "3600524029531",
-      "name": "Elsève Hyaluron Repulp Shampooing",
+      "name": "Elsève Hyaluron Repulp shampoing",
       "brand": "L'Oréal Paris",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux déshydratés",
         "Cheveux fatigués",
@@ -782,7 +782,7 @@
       "price": 6.9,
       "currency": "EUR",
       "volume": "250ml",
-      "usage": "Shampooing ré-hydratant pour cheveux déshydratés. Hydratation intense 72h.",
+      "usage": "shampoing ré-hydratant pour cheveux déshydratés. Hydratation intense 72h.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Compléter avec le démêlant.",
       "precautions": [
         "Usage externe uniquement",
@@ -816,9 +816,9 @@
     {
       "id": "LRP-KERIUM-DOUX-001",
       "ean13": "3337872414602",
-      "name": "Kerium Doux Extrême Shampooing-Gel",
+      "name": "Kerium Doux Extrême shampoing-Gel",
       "brand": "La Roche-Posay",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cuir chevelu sensible",
         "Tous types de cheveux"
@@ -826,7 +826,7 @@
       "price": 13.9,
       "currency": "EUR",
       "volume": "400ml",
-      "usage": "Shampooing-gel ultra-doux pour cuir chevelu sensible.",
+      "usage": "shampoing-gel ultra-doux pour cuir chevelu sensible.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Usage fréquent.",
       "precautions": [
         "Usage externe uniquement"
@@ -860,9 +860,9 @@
     {
       "id": "LRP-KERIUM-GRAS-001",
       "ean13": "3337872414619",
-      "name": "Kerium Shampooing-Gel Antipelliculaire Gras",
+      "name": "Kerium shampoing-Gel Antipelliculaire Gras",
       "brand": "La Roche-Posay",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Pellicules grasses",
         "Cuir chevelu gras"
@@ -870,7 +870,7 @@
       "price": 14.5,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing traitant antipelliculaire pour cuir chevelu gras.",
+      "usage": "shampoing traitant antipelliculaire pour cuir chevelu gras.",
       "instructions": "Appliquer 2x/semaine, masser, laisser 2 min, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -900,9 +900,9 @@
     {
       "id": "MUSTELA-BEBE-001",
       "ean13": "3504105029791",
-      "name": "Shampooing Mousse Nourrisson",
+      "name": "shampoing Mousse Nourrisson",
       "brand": "Mustela",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Bébés",
         "Nourrissons"
@@ -910,7 +910,7 @@
       "price": 9.9,
       "currency": "EUR",
       "volume": "150ml",
-      "usage": "Shampooing mousse doux pour le cuir chevelu fragile des nourrissons.",
+      "usage": "shampoing mousse doux pour le cuir chevelu fragile des nourrissons.",
       "instructions": "Appliquer sur cuir chevelu humide, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -943,16 +943,16 @@
     {
       "id": "NUXE-PRODIGIEUX-001",
       "ean13": "3264680009761",
-      "name": "Shampooing Prodigieux",
+      "name": "shampoing Prodigieux",
       "brand": "Nuxe",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Tous types de cheveux"
       ],
       "price": 14.5,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing sublimateur au parfum iconique Prodigieux.",
+      "usage": "shampoing sublimateur au parfum iconique Prodigieux.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -981,9 +981,9 @@
     {
       "id": "PHYTO-PHYTOCOLOR-001",
       "ean13": "3338221000101",
-      "name": "Phytocolor Shampooing Protecteur",
+      "name": "Phytocolor shampoing Protecteur",
       "brand": "Phyto",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux colorés",
         "Cheveux méchés"
@@ -991,7 +991,7 @@
       "price": 12.9,
       "currency": "EUR",
       "volume": "250ml",
-      "usage": "Shampooing protecteur pour prolonger l'éclat des cheveux colorés.",
+      "usage": "shampoing protecteur pour prolonger l'éclat des cheveux colorés.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -1023,9 +1023,9 @@
     {
       "id": "PHYTO-PHYTOCYANE-001",
       "ean13": "3338221000118",
-      "name": "Phytocyane Shampooing Redensifiant",
+      "name": "Phytocyane shampoing Redensifiant",
       "brand": "Phyto",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux clairsemés",
         "Femmes"
@@ -1033,7 +1033,7 @@
       "price": 15.9,
       "currency": "EUR",
       "volume": "250ml",
-      "usage": "Shampooing densifiant pour cheveux clairsemés féminins.",
+      "usage": "shampoing densifiant pour cheveux clairsemés féminins.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -1065,9 +1065,9 @@
     {
       "id": "FURTERER-FORTICEA-001",
       "ean13": "3282770152654",
-      "name": "Forticea Shampooing Énergisant",
+      "name": "Forticea shampoing Énergisant",
       "brand": "René Furterer",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux fatigués",
         "Chute de cheveux"
@@ -1075,7 +1075,7 @@
       "price": 16.9,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing stimulant pour cheveux fatigués et clairsemés.",
+      "usage": "shampoing stimulant pour cheveux fatigués et clairsemés.",
       "instructions": "Appliquer sur cheveux mouillés, masser 2 min, rincer. 2-3x/semaine.",
       "precautions": [
         "Usage externe uniquement",
@@ -1118,7 +1118,7 @@
       "currency": "EUR",
       "volume": "100ml",
       "usage": "Masque haute nutrition pour cheveux très secs.",
-      "instructions": "Appliquer sur longueurs après shampooing, laisser 5-10 min, rincer.",
+      "instructions": "Appliquer sur longueurs après shampoing, laisser 5-10 min, rincer.",
       "precautions": [
         "Usage externe uniquement"
       ],
@@ -1147,9 +1147,9 @@
     {
       "id": "FURTERER-KARITE-001",
       "ean13": "3282770152661",
-      "name": "Karité Nutri Shampooing Nutrition Intense",
+      "name": "Karité Nutri shampoing Nutrition Intense",
       "brand": "René Furterer",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux très secs",
         "Cheveux crépus"
@@ -1157,7 +1157,7 @@
       "price": 15.9,
       "currency": "EUR",
       "volume": "150ml",
-      "usage": "Shampooing haute nutrition pour cheveux très secs.",
+      "usage": "shampoing haute nutrition pour cheveux très secs.",
       "instructions": "Appliquer sur cheveux mouillés, masser, laisser poser 2 min, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -1189,9 +1189,9 @@
     {
       "id": "FURTERER-NATURIA-001",
       "ean13": "3282770152647",
-      "name": "Naturia Shampooing Micellaire Douceur Bio",
+      "name": "Naturia shampoing Micellaire Douceur Bio",
       "brand": "René Furterer",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Tous types de cheveux",
         "Usage fréquent"
@@ -1199,7 +1199,7 @@
       "price": 14.9,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing ultra-doux pour usage fréquent. Nettoie en douceur.",
+      "usage": "shampoing ultra-doux pour usage fréquent. Nettoie en douceur.",
       "instructions": "Appliquer sur cheveux mouillés, masser, rincer. Usage quotidien.",
       "precautions": [
         "Usage externe uniquement"
@@ -1239,9 +1239,9 @@
     {
       "id": "VICHY-DERCOS-ANTIPEL-001",
       "ean13": "3337871330194",
-      "name": "Dercos Shampooing Anti-Pelliculaire",
+      "name": "Dercos shampoing Anti-Pelliculaire",
       "brand": "Vichy",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Pellicules",
         "Cheveux normaux à gras"
@@ -1249,7 +1249,7 @@
       "price": 13.9,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing traitant antipelliculaire pour cheveux normaux à gras.",
+      "usage": "shampoing traitant antipelliculaire pour cheveux normaux à gras.",
       "instructions": "Appliquer 2-3x/semaine, masser, rincer.",
       "precautions": [
         "Usage externe uniquement"
@@ -1280,9 +1280,9 @@
     {
       "id": "VICHY-DERCOS-ENERGISANT-001",
       "ean13": "3337871330187",
-      "name": "Dercos Shampooing Énergisant",
+      "name": "Dercos shampoing Énergisant",
       "brand": "Vichy",
-      "category": "Shampooing",
+      "category": "shampoing",
       "hair_type": [
         "Cheveux clairsemés",
         "Chute de cheveux"
@@ -1290,7 +1290,7 @@
       "price": 14.9,
       "currency": "EUR",
       "volume": "200ml",
-      "usage": "Shampooing fortifiant pour cheveux clairsemés.",
+      "usage": "shampoing fortifiant pour cheveux clairsemés.",
       "instructions": "Appliquer sur cheveux mouillés, masser 1 min, rincer.",
       "precautions": [
         "Usage externe uniquement"

@@ -48,7 +48,7 @@
         })(),
         // 0 => pas de timeout côté tablette (le backend pilote la durée).
         scanTimeout: Math.max(0, getNumberFromQuery("scan_timeout_ms", 0)),
-        voiceListenDurationS: Math.max(3, getNumberFromQuery("voice_duration_s", 12)),
+        voiceListenDurationS: Math.max(3, getNumberFromQuery("voice_duration_s", 3600)),
         placeholderImage: "placeholder.png",
         debug: true
     };
@@ -60,6 +60,8 @@
         products: [],
         filteredProducts: [],
         top3Results: [],
+        voiceRecording: false,
+        scanInProgress: false,
         productLockedUntil: 0
     };
 
@@ -193,6 +195,41 @@
             this.showScreen("loading");
         },
 
+        setScanInProgress: function (inProgress) {
+            AppState.scanInProgress = !!inProgress;
+        },
+
+        setVoiceRecordingState: function (recording) {
+            AppState.voiceRecording = !!recording;
+            var startIds = ["voice-start-btn", "product-voice-start-btn"];
+            var sendIds = ["voice-send-btn", "product-voice-send-btn"];
+            var i;
+            for (i = 0; i < startIds.length; i += 1) {
+                var startBtn = byId(startIds[i]);
+                if (startBtn) {
+                    startBtn.style.display = recording ? "none" : "";
+                }
+            }
+            for (i = 0; i < sendIds.length; i += 1) {
+                var sendBtn = byId(sendIds[i]);
+                if (sendBtn) {
+                    sendBtn.style.display = recording ? "" : "none";
+                }
+            }
+        },
+
+        updateVoiceTranscriptPreview: function (text) {
+            var value = String(text || "").trim();
+            var ids = ["voice-transcript-preview", "product-voice-transcript-preview"];
+            var i;
+            for (i = 0; i < ids.length; i += 1) {
+                var el = byId(ids[i]);
+                if (el) {
+                    el.textContent = value;
+                }
+            }
+        },
+
         showSecurityMessage: function (title, message) {
             byId("security-title").textContent = title || "Information";
             byId("security-message").textContent = message || "";
@@ -236,47 +273,58 @@
         },
 
         startVisualScan: function () {
-            this.showLoading("Analyse du produit en cours...");
-            if (!this.sendCommand("start_visual_scan", {})) {
-                this.showError("Connexion tablette indisponible.");
+            if (AppState.scanInProgress) {
+                this.log("Scan déjà en cours, action ignorée");
                 return;
             }
-
-            if (CONFIG.scanTimeout > 0) {
-                var self = this;
-                setTimeout(function () {
-                    if (AppState.currentScreen === "loading") {
-                        self.showScreen("scan-choice");
-                        self.showError("Le scan a pris trop de temps. Veuillez réessayer.");
-                    }
-                }, CONFIG.scanTimeout);
+            this.setScanInProgress(true);
+            this.showLoading("Analyse du produit en cours...");
+            if (!this.sendCommand("start_visual_scan", {})) {
+                this.setScanInProgress(false);
+                this.showError("Connexion tablette indisponible.");
+                return;
             }
         },
 
         startBarcodeScan: function () {
+            if (AppState.scanInProgress) {
+                this.log("Scan déjà en cours, action ignorée");
+                return;
+            }
+            this.setScanInProgress(true);
             this.showScreen("barcode-scan");
             this.updateBarcodeStatus("waiting", "Recherche du code-barres...");
             if (!this.sendCommand("start_barcode_scan", {})) {
+                this.setScanInProgress(false);
                 this.showError("Connexion tablette indisponible.");
                 return;
-            }
-
-            if (CONFIG.scanTimeout > 0) {
-                var self = this;
-                setTimeout(function () {
-                    if (AppState.currentScreen === "barcode-scan") {
-                        self.updateBarcodeStatus("error", "Le scan a pris trop de temps. Réessayez.");
-                    }
-                }, CONFIG.scanTimeout);
             }
         },
 
         startVoiceQuestion: function () {
-            if (!this.sendCommand("start_voice_question", { duration_s: CONFIG.voiceListenDurationS })) {
+            var useProductContext = (AppState.currentScreen === "product" && !!AppState.currentProduct);
+            if (!this.sendCommand("start_voice_question", {
+                duration_s: CONFIG.voiceListenDurationS,
+                manual_send: true,
+                use_product_context: useProductContext
+            })) {
                 this.showError("Connexion tablette indisponible.");
                 return;
             }
-            this.showLoading("Micro activé. Parlez maintenant...");
+            this.setVoiceRecordingState(true);
+            this.updateVoiceTranscriptPreview("Micro activé. Parlez puis appuyez sur « Envoyer la question ».");
+        },
+
+        stopVoiceQuestion: function () {
+            if (!AppState.voiceRecording) {
+                return;
+            }
+            if (!this.sendCommand("stop_voice_question", { manual_send: true })) {
+                this.showError("Connexion tablette indisponible.");
+                return;
+            }
+            this.setVoiceRecordingState(false);
+            this.showLoading("Envoi de la question en cours...");
         },
 
         askTextQuestion: function () {
@@ -297,6 +345,8 @@
 
         showProduct: function (product) {
             product = product || {};
+            this.setScanInProgress(false);
+            AppState.currentProduct = product;
             AppState.productLockedUntil = Date.now() + 15000;
             var img = byId("product-image");
             if (img) {
@@ -317,6 +367,7 @@
         },
 
         showTop3: function (results) {
+            this.setScanInProgress(false);
             AppState.top3Results = results || [];
             var container = byId("top3-cards");
             container.innerHTML = "";
@@ -447,6 +498,73 @@
             }
         },
 
+        showAdviceAnswer: function (question, answer, recommendations) {
+            var answerBox = byId("advice-answer-box");
+            var answerText = byId("advice-answer-text");
+            if (answerBox && answerText) {
+                answerText.textContent = String(answer || "").trim() || "Réponse vide";
+                answerBox.style.display = "";
+            }
+
+            var recoSection = byId("advice-reco-section");
+            var recoGrid = byId("advice-reco-grid");
+            var items = recommendations || [];
+            if (Object.prototype.toString.call(items) !== "[object Array]") {
+                items = [];
+            }
+            if (recoSection && recoGrid) {
+                recoGrid.innerHTML = "";
+                if (items.length > 0) {
+                    var self = this;
+                    for (var i = 0; i < items.length; i += 1) {
+                        (function (idx) {
+                            var p = items[idx] || {};
+                            if (Object.prototype.toString.call(p.hair_type) === "[object Array]") {
+                                p.hair_type = p.hair_type.join(", ");
+                            }
+                            var item = document.createElement("div");
+                            item.className = "product-grid-item";
+                            item.onclick = function () {
+                                self.showProduct(p);
+                            };
+
+                            var img = document.createElement("img");
+                            img.src = self.resolveImageUrl(p.image, p);
+                            img.alt = p.name || "Produit";
+                            img.onerror = function () {
+                                img.onerror = null;
+                                img.src = self.resolveImageUrl("", p);
+                            };
+
+                            var name = document.createElement("p");
+                            name.className = "name";
+                            name.textContent = p.name || "Produit";
+
+                            var brand = document.createElement("p");
+                            brand.className = "brand";
+                            brand.textContent = p.brand || "";
+
+                            var price = document.createElement("p");
+                            price.className = "price";
+                            price.textContent = (typeof p.price === "number")
+                                ? (p.price.toFixed(2) + " €")
+                                : "";
+
+                            item.appendChild(img);
+                            item.appendChild(name);
+                            item.appendChild(brand);
+                            item.appendChild(price);
+                            recoGrid.appendChild(item);
+                        })(i);
+                    }
+                    recoSection.style.display = "";
+                } else {
+                    recoSection.style.display = "none";
+                }
+            }
+            this.showScreen("advice");
+        },
+
         handleServerMessage: function (rawMessage) {
             var message;
             try {
@@ -461,18 +579,31 @@
             } else if (message.type === "top3_results") {
                 this.showTop3(message.results);
             } else if (message.type === "barcode_detected") {
+                this.setScanInProgress(false);
                 this.updateBarcodeStatus("success", "Code-barres détecté: " + (message.ean || ""));
                 if (message.product) {
                     this.showProduct(message.product);
                 }
             } else if (message.type === "barcode_failed") {
+                this.setScanInProgress(false);
                 this.updateBarcodeStatus("error", "Code-barres non reconnu");
             } else if (message.type === "security_alert") {
+                this.setScanInProgress(false);
                 this.showSecurityMessage(message.title || "Information", message.message || "");
             } else if (message.type === "error") {
-                this.showError(message.message || "Erreur inconnue");
+                var err = String(message.message || "");
+                var errLower = err.toLowerCase();
+                if (errLower.indexOf("scan déjà en cours") >= 0 || errLower.indexOf("scan deja en cours") >= 0) {
+                    this.log("Erreur non bloquante ignorée:", err);
+                    return;
+                }
+                this.setScanInProgress(false);
+                this.showError(err || "Erreur inconnue");
             } else if (message.type === "show_screen") {
                 var nextScreen = message.screen || "home";
+                if (nextScreen === "home" || nextScreen === "scan-choice") {
+                    this.setScanInProgress(false);
+                }
                 if (
                     AppState.currentScreen === "product"
                     && Date.now() < (AppState.productLockedUntil || 0)
@@ -497,17 +628,41 @@
             } else if (message.type === "status") {
                 this.updateConnectionStatus(message.status || "connecté");
             } else if (message.type === "qa_answer") {
-                this.showSecurityMessage("Réponse Pepper", message.answer || "Réponse vide");
+                if (
+                    String(message.context_mode || "").toLowerCase() === "product"
+                    && AppState.currentProduct
+                ) {
+                    var preview = byId("product-voice-transcript-preview");
+                    if (preview) {
+                        var a = (message.answer || "Réponse vide").trim();
+                        preview.textContent = "Réponse: " + a;
+                    }
+                    this.showScreen("product");
+                } else {
+                    this.showAdviceAnswer(
+                        message.question || "",
+                        message.answer || "Réponse vide",
+                        message.recommendations || []
+                    );
+                }
             } else if (message.type === "voice_status") {
                 var status = String(message.status || "").toLowerCase();
                 var msg = message.message || "";
                 var title = message.title || "Question vocale";
-                if (status === "listening" || status === "processing") {
+                if (status === "listening") {
+                    this.setVoiceRecordingState(true);
+                    this.updateVoiceTranscriptPreview(msg || "Micro activé. Parlez puis appuyez sur « Envoyer la question ».");
+                } else if (status === "processing") {
                     this.showLoading(msg || "Traitement vocal en cours...");
                 } else if (status === "timeout" || status === "error") {
+                    this.setVoiceRecordingState(false);
                     this.showSecurityMessage(title, msg || "Je n'ai pas bien entendu.");
+                } else if (status === "transcript") {
+                    // Transcription cachée côté UI (demande métier).
+                    this.log("Transcription vocale reçue (masquée).");
                 } else if (status === "done" && AppState.currentScreen === "loading") {
-                    this.showScreen("advice");
+                    this.setVoiceRecordingState(false);
+                    this.showScreen(AppState.currentProduct ? "product" : "advice");
                 }
             }
         },
@@ -530,6 +685,8 @@
 
             AppState.ws.onclose = function () {
                 AppState.connected = false;
+                self.setVoiceRecordingState(false);
+                self.setScanInProgress(false);
                 self.updateConnectionStatus("Déconnecté");
                 setTimeout(function () { self.connectWebSocket(); }, 3000);
             };

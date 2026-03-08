@@ -75,16 +75,10 @@ class SecurityConfig:
 # Liste des mots-clés médicaux à détecter
 MEDICAL_KEYWORDS = {
     # Symptômes
-    "douleur", "douleurs", "mal", "maux",
+    "douleur", "douleurs",
     "symptôme", "symptômes", "symptome", "symptomes",
-    "démangeaison", "démangeaisons", "demangeaison",
-    "irritation", "irritations",
-    "rougeur", "rougeurs",
     "gonflement", "gonflements",
     "fièvre", "fievre",
-    "fatigue",
-    "vertige", "vertiges",
-    "nausée", "nausées", "nausee",
 
     # Conditions médicales
     "allergie", "allergies", "allergique",
@@ -95,7 +89,6 @@ MEDICAL_KEYWORDS = {
     "maladie", "maladies",
     "pathologie", "pathologies",
     "alopécie", "alopecie",
-    "calvitie",
 
     # Termes médicaux
     "traitement", "traitements",
@@ -110,10 +103,8 @@ MEDICAL_KEYWORDS = {
     "intoxication",
 
     # Actions médicales
-    "consulter", "consultation",
     "médecin", "medecin", "docteur",
     "dermatologue", "dermato",
-    "spécialiste", "specialiste",
     "urgence", "urgences",
     "hôpital", "hopital",
     "samu",
