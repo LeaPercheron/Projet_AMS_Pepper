@@ -1865,19 +1865,27 @@ class PepperAssistant:
             websocket=websocket,
         )
 
-        # En mode ALAudioRecorder, ajuster le fallback avec le format réellement observé.
+        # Ajuster le fallback avec le format audio réellement observé depuis Pepper.
         vf_config = getattr(self.voice_fallback, "config", None)
         detected_channels = int(getattr(self.adapter, "_audio_pull_detected_channels", 0) or 0)
         detected_rate = int(getattr(self.adapter, "_audio_pull_detected_rate", 0) or 0)
         if vf_config and detected_channels > 0 and vf_config.input_channels != detected_channels:
             vf_config.input_channels = detected_channels
             self.logger.log_info(
-                f"  Fallback vocal: canaux audio ajustés à {detected_channels} (ALAudioRecorder)"
+                f"  Fallback vocal: canaux audio ajustés à {detected_channels}"
             )
         if vf_config and detected_rate > 0 and vf_config.input_sample_rate != detected_rate:
             vf_config.input_sample_rate = detected_rate
             self.logger.log_info(
-                f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz (ALAudioRecorder)"
+                f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz"
+            )
+        # Quand Pepper envoie 4 canaux via qi, le micro avant est à l'index 2 (L=0,R=1,Front=2,Rear=3).
+        # Le mode ALAudioRecorder front-only fixait mono_channel_index=0 (1 seul canal). Corriger.
+        if vf_config and detected_channels == 4 and vf_config.mono_channel_index == 0:
+            qi_front_idx = int(os.getenv("OPENAI_HTTP_MONO_CHANNEL_INDEX", "2") or 2)
+            vf_config.mono_channel_index = qi_front_idx
+            self.logger.log_info(
+                f"  Fallback vocal: canal mono ajusté à {qi_front_idx} (4 canaux qi, micro avant)"
             )
 
         # Pepper parle EN PREMIER (bloquant) pour que arm_listen_window ne capte pas le TTS.
