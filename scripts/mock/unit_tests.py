@@ -111,7 +111,7 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
 
     images = [Image.new("RGB", (10, 10), color="white") for _ in range(3)]
 
-    # Cas 1: Barcode prioritaire
+    # Cas 1: VLM high -> Top-3 (plus d'affichage direct high)
     pipeline = VisionPipeline(product_db, use_simulation=True)
     pipeline.capture = DummyCapture()
     pipeline.vlm = DummyVLM(0.95, "Test Shampoo", "TestBrand")
@@ -119,17 +119,9 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
         BarcodeResult(ean13="1111111111111", confidence=0.8, positions=[], image_indices=[0, 1])
     )
     res = pipeline.identify_from_images(images)
-    _record(results, "B1.Vision.BarcodePriority", res.source == IdentificationSource.BARCODE)
+    _record(results, "B1.Vision.Top3Priority", res.source == IdentificationSource.VLM_MEDIUM and len(res.candidates) >= 1)
 
-    # Cas 2: VLM high
-    pipeline = VisionPipeline(product_db, use_simulation=True)
-    pipeline.capture = DummyCapture()
-    pipeline.vlm = DummyVLM(0.9, "Test Shampoo", "TestBrand")
-    pipeline.barcode_detector = DummyBarcodeDetector(None)
-    res = pipeline.identify_from_images(images)
-    _record(results, "B1.Vision.VLMHigh", res.source == IdentificationSource.VLM_HIGH)
-
-    # Cas 3: VLM medium -> Top-3
+    # Cas 2: VLM medium -> Top-3
     top3 = [
         VLMResult("Test Shampoo", "TestBrand", 0.75, "shampoo", "", 1.0),
         VLMResult("Test Conditioner", "TestBrand", 0.65, "shampoo", "", 1.0),
@@ -142,7 +134,7 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
     res = pipeline.identify_from_images(images)
     _record(results, "B1.Vision.VLMMedium", res.source == IdentificationSource.VLM_MEDIUM and len(res.candidates) == 3)
 
-    # Cas 4: VLM low + barcode => fallback
+    # Cas 3: VLM low + barcode => barcode
     pipeline = VisionPipeline(product_db, use_simulation=True)
     pipeline.capture = DummyCapture()
     pipeline.vlm = DummyVLM(0.4, "Test Shampoo", "TestBrand")
@@ -150,7 +142,15 @@ def test_vision_arbitrage(results: List[TestResult]) -> None:
         BarcodeResult(ean13="1111111111111", confidence=0.5, positions=[], image_indices=[2])
     )
     res = pipeline.identify_from_images(images)
-    _record(results, "B1.Vision.Fallback", res.source == IdentificationSource.FALLBACK)
+    _record(results, "B1.Vision.BarcodeFallback", res.source == IdentificationSource.BARCODE)
+
+    # Cas 4: VLM low + pas de barcode => echec
+    pipeline = VisionPipeline(product_db, use_simulation=True)
+    pipeline.capture = DummyCapture()
+    pipeline.vlm = DummyVLM(0.35, "Unknown Product", "UnknownBrand")
+    pipeline.barcode_detector = DummyBarcodeDetector(None)
+    res = pipeline.identify_from_images(images)
+    _record(results, "B1.Vision.LowNoBarcode", res.source == IdentificationSource.FAILED)
 
     # Seuils
     _record(results, "B1.Vision.Thresholds", CONFIDENCE_HIGH == 0.85 and CONFIDENCE_MEDIUM == 0.60)
@@ -195,18 +195,19 @@ def test_state_machine(results: List[TestResult]) -> None:
         return ok and sm.state == expected_state
 
     ok_path = True
-    ok_path &= _go(Event.PERSON_DETECTED, State.GREETING)
+    ok_path &= _go(Event.SPEECH_DETECTED, State.GREETING)
     ok_path &= _go(Event.SPEECH_DETECTED, State.AWAITING_INTENT)
     ok_path &= _go(Event.PRODUCT_SHOWN, State.SCANNING_PRODUCT)
-    ok_path &= _go(Event.VLM_HIGH_CONFIDENCE, State.DISPLAYING_INFO)
+    ok_path &= _go(Event.VLM_MEDIUM_CONFIDENCE, State.CONFIRMING_TOP3)
+    ok_path &= _go(Event.USER_SELECTED, State.DISPLAYING_INFO)
     ok_path &= _go(Event.QUESTION_ASKED, State.CONVERSING)
     ok_path &= _go(Event.GOODBYE_DETECTED, State.ENDING)
-    ok_path &= _go(Event.PERSON_LEFT, State.IDLE)
+    ok_path &= _go(Event.TIMEOUT, State.IDLE)
     _record(results, "B1.StateMachine.MainPath", ok_path)
 
     # Timeout
     sm.reset()
-    ok_timeout = sm.process_event(Event.PERSON_DETECTED) and sm.state == State.GREETING
+    ok_timeout = sm.process_event(Event.SPEECH_DETECTED) and sm.state == State.GREETING
     ok_timeout &= sm.process_event(Event.TIMEOUT) and sm.state == State.IDLE
     _record(results, "B1.StateMachine.Timeout", ok_timeout)
 

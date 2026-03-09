@@ -22,7 +22,6 @@ sys.path.insert(0, str(src_path))
 
 class ScenarioStep(Enum):
     # Types d'etapes de scenario.
-    PERSON_DETECTED = "person_detected"
     SPEECH = "speech"
     SHOW_PRODUCT = "show_product"
     VLM_RESULT = "vlm_result"
@@ -32,7 +31,6 @@ class ScenarioStep(Enum):
     USER_SELECT = "user_select"
     QUESTION = "question"
     GOODBYE = "goodbye"
-    PERSON_LEFT = "person_left"
     WAIT = "wait"
     CHECK_STATE = "check_state"
 
@@ -53,7 +51,7 @@ SCENARIOS = {
         name="Happy Path",
         description="Parcours ideal: detection -> scan -> info -> question -> fin",
         steps=[
-            {"type": "person_detected"},
+            {"type": "speech", "text": "Bonjour"},
             {"type": "wait", "duration": 1.0},
             {"type": "check_state", "expected": "GREETING"},
             {"type": "speech", "text": "Bonjour"},
@@ -62,7 +60,14 @@ SCENARIOS = {
             {"type": "show_product"},
             {"type": "wait", "duration": 0.5},
             {"type": "check_state", "expected": "SCANNING_PRODUCT"},
-            {"type": "vlm_result", "confidence": 0.92, "product": "Klorane Shampooing"},
+            {"type": "vlm_result", "confidence": 0.92, "candidates": [
+                {"name": "Klorane Shampooing", "score": 0.92},
+                {"name": "Klorane Avoine", "score": 0.67},
+                {"name": "Ducray Extra-Doux", "score": 0.55}
+            ]},
+            {"type": "wait", "duration": 0.5},
+            {"type": "check_state", "expected": "CONFIRMING_TOP3"},
+            {"type": "user_select", "index": 0},
             {"type": "wait", "duration": 0.5},
             {"type": "check_state", "expected": "DISPLAYING_INFO"},
             {"type": "question", "text": "Quel est le prix?"},
@@ -70,8 +75,7 @@ SCENARIOS = {
             {"type": "goodbye"},
             {"type": "wait", "duration": 0.5},
             {"type": "check_state", "expected": "ENDING"},
-            {"type": "person_left"},
-            {"type": "wait", "duration": 0.5},
+            {"type": "wait", "duration": 5.5},
             {"type": "check_state", "expected": "IDLE"},
         ]
     ),
@@ -80,7 +84,7 @@ SCENARIOS = {
         name="Top-3 Confirmation",
         description="VLM confiance moyenne -> Top-3 -> selection utilisateur",
         steps=[
-            {"type": "person_detected"},
+            {"type": "speech", "text": "Bonjour"},
             {"type": "wait", "duration": 0.5},
             {"type": "show_product"},
             {"type": "vlm_result", "confidence": 0.72, "candidates": [
@@ -94,7 +98,8 @@ SCENARIOS = {
             {"type": "wait", "duration": 0.5},
             {"type": "check_state", "expected": "DISPLAYING_INFO"},
             {"type": "goodbye"},
-            {"type": "person_left"},
+            {"type": "wait", "duration": 5.5},
+            {"type": "check_state", "expected": "IDLE"},
         ]
     ),
 
@@ -102,7 +107,7 @@ SCENARIOS = {
         name="Barcode Fallback",
         description="VLM echoue -> fallback code-barres",
         steps=[
-            {"type": "person_detected"},
+            {"type": "speech", "text": "Bonjour"},
             {"type": "wait", "duration": 0.5},
             {"type": "show_product"},
             {"type": "vlm_result", "confidence": 0.35, "failed": True},
@@ -112,7 +117,8 @@ SCENARIOS = {
             {"type": "wait", "duration": 0.5},
             {"type": "check_state", "expected": "DISPLAYING_INFO"},
             {"type": "goodbye"},
-            {"type": "person_left"},
+            {"type": "wait", "duration": 5.5},
+            {"type": "check_state", "expected": "IDLE"},
         ]
     ),
 
@@ -120,7 +126,7 @@ SCENARIOS = {
         name="Timeout Recovery",
         description="Test des timeouts et retour a IDLE",
         steps=[
-            {"type": "person_detected"},
+            {"type": "speech", "text": "Bonjour"},
             {"type": "wait", "duration": 0.5},
             {"type": "check_state", "expected": "GREETING"},
             # Pas de reponse -> timeout
@@ -133,7 +139,7 @@ SCENARIOS = {
         name="Security Alert",
         description="Detection question medicale",
         steps=[
-            {"type": "person_detected"},
+            {"type": "speech", "text": "Bonjour"},
             {"type": "wait", "duration": 0.5},
             {"type": "speech", "text": "Bonjour"},
             {"type": "wait", "duration": 0.5},
@@ -142,7 +148,8 @@ SCENARIOS = {
             {"type": "check_state", "expected": "ADVISING"},
             {"type": "wait", "duration": 2.0},
             {"type": "goodbye"},
-            {"type": "person_left"},
+            {"type": "wait", "duration": 5.5},
+            {"type": "check_state", "expected": "IDLE"},
         ]
     ),
 }
@@ -284,14 +291,6 @@ class ReplaySimulator:
                     print(f"    Etat attendu: {expected}, actuel: {actual}")
                 return actual == expected
 
-            elif step_type == "person_detected":
-                await self.orchestrator.send_event(self.Event.PERSON_DETECTED)
-                return True
-
-            elif step_type == "person_left":
-                await self.orchestrator.send_event(self.Event.PERSON_LEFT)
-                return True
-
             elif step_type == "speech":
                 text = step.get("text", "")
                 await self.orchestrator.send_event(
@@ -314,11 +313,6 @@ class ReplaySimulator:
                     await self.orchestrator.send_event(
                         self.Event.VLM_LOW_CONFIDENCE,
                         {"confidence": confidence}
-                    )
-                elif confidence >= 0.85:
-                    await self.orchestrator.send_event(
-                        self.Event.VLM_HIGH_CONFIDENCE,
-                        {"confidence": confidence, "product_name": product}
                     )
                 else:
                     await self.orchestrator.send_event(

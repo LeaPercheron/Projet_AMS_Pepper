@@ -13,8 +13,9 @@ Ce README decrit l'etat actuel du code et les commandes reelles pour lancer le p
 ### Fonctionnel aujourd'hui
 - Interface tablette Pepper (`tablet/index.html`)
 - WebSocket tablette <-> backend Python
-- Scan visuel VLM (Qwen2-VL-2B-Instruct-4bit via MLX)
-- Fallback automatique vers scan code-barres si le visuel echoue
+- Scan visuel prioritaire (OpenAI Vision), fallback VLM local (MLX)
+- Confirmation visuelle Top-3 prioritaire (pas d'identification directe high)
+- Fallback automatique vers scan code-barres si la vision est insuffisante
 - Scan code-barres via camera Pepper + pyzbar/libzbar
 - Affichage fiche produit (image locale, marque, usage, type cheveux)
 - Question vocale depuis tablette
@@ -177,8 +178,8 @@ Dump images scan:
   - mauvais reseau, IP Mac incorrecte, firewall
 
 - VLM indisponible:
-  - verifier deps `mlx-vlm`, `mistral-common`
-  - verifier acces TLS/HuggingFace
+  - verifier `OPENAI_API_KEY` et acces sortant OpenAI
+  - verifier deps `mlx-vlm`, `mistral-common` pour le fallback local
   - fallback barcode reste disponible
 
 - OpenAI ne repond pas:

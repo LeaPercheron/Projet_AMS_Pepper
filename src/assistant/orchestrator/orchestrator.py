@@ -39,10 +39,6 @@ class State(Enum):
 
 class Event(Enum):
     # Événements déclencheurs de transitions.
-    # Présence
-    PERSON_DETECTED = auto()
-    PERSON_LEFT = auto()
-
     # Audio
     SPEECH_DETECTED = auto()
     SPEECH_ENDED = auto()
@@ -174,7 +170,6 @@ class InteractionContext:
     session_start: float = 0.0
 
     # Client
-    person_detected: bool = False
     last_activity: float = 0.0
 
     # Produit
@@ -196,7 +191,6 @@ class InteractionContext:
         # Réinitialise le contexte.
         self.session_id = ""
         self.session_start = 0.0
-        self.person_detected = False
         self.current_product_id = ""
         self.current_product_name = ""
         self.current_ean = ""
@@ -234,12 +228,14 @@ class StateMachine:
         # Définit toutes les transitions possibles.
         transitions = {
             # IDLE
-            (State.IDLE, Event.PERSON_DETECTED): State.GREETING,
+            (State.IDLE, Event.SPEECH_DETECTED): State.GREETING,
+            (State.IDLE, Event.PRODUCT_SHOWN): State.SCANNING_PRODUCT,
+            (State.IDLE, Event.QUESTION_ASKED): State.CONVERSING,
+            (State.IDLE, Event.INTENT_RECOGNIZED): State.CONVERSING,
 
             # GREETING
             (State.GREETING, Event.SPEECH_DETECTED): State.AWAITING_INTENT,
             (State.GREETING, Event.PRODUCT_SHOWN): State.SCANNING_PRODUCT,
-            (State.GREETING, Event.PERSON_LEFT): State.IDLE,
             (State.GREETING, Event.TIMEOUT): State.IDLE,
 
             # AWAITING_INTENT
@@ -247,7 +243,6 @@ class StateMachine:
             (State.AWAITING_INTENT, Event.PRODUCT_SHOWN): State.SCANNING_PRODUCT,
             (State.AWAITING_INTENT, Event.QUESTION_ASKED): State.CONVERSING,
             (State.AWAITING_INTENT, Event.GOODBYE_DETECTED): State.ENDING,
-            (State.AWAITING_INTENT, Event.PERSON_LEFT): State.IDLE,
             (State.AWAITING_INTENT, Event.TIMEOUT): State.ENDING,
             (State.AWAITING_INTENT, Event.SECURITY_ALERT): State.ADVISING,
 
@@ -291,9 +286,9 @@ class StateMachine:
             (State.ADVISING, Event.TIMEOUT): State.AWAITING_INTENT,
 
             # ENDING
-            (State.ENDING, Event.PERSON_LEFT): State.IDLE,
             (State.ENDING, Event.TIMEOUT): State.IDLE,
-            (State.ENDING, Event.PERSON_DETECTED): State.GREETING,
+            (State.ENDING, Event.SPEECH_DETECTED): State.GREETING,
+            (State.ENDING, Event.PRODUCT_SHOWN): State.SCANNING_PRODUCT,
 
             # ERROR (peut transiter depuis n'importe quel état)
             (State.ERROR, Event.RECOVERY_COMPLETE): State.IDLE,
@@ -636,13 +631,7 @@ class Orchestrator:
 
     def _update_context(self, event: Event, data: Dict):
         # Met à jour le contexte selon l'événement.
-        if event == Event.PERSON_DETECTED:
-            self.context.person_detected = True
-
-        elif event == Event.PERSON_LEFT:
-            self.context.person_detected = False
-
-        elif event == Event.SPEECH_DETECTED:
+        if event == Event.SPEECH_DETECTED:
             self.context.last_user_input = data.get("text", "")
 
         elif event == Event.VLM_HIGH_CONFIDENCE:
@@ -1017,32 +1006,6 @@ class Orchestrator:
 
     # TÂCHES PARALLÈLES
 
-    async def _monitor_presence(self):
-        # Tâche de monitoring de présence.
-        last_presence = False
-
-        while self._running:
-            try:
-                presence = self.context.person_detected
-                if self._robot_actions and hasattr(self._robot_actions, "is_person_present"):
-                    try:
-                        presence = bool(self._robot_actions.is_person_present())
-                    except Exception:
-                        presence = self.context.person_detected
-
-                if presence != last_presence:
-                    if presence:
-                        await self.send_event(Event.PERSON_DETECTED)
-                    else:
-                        await self.send_event(Event.PERSON_LEFT)
-                    last_presence = presence
-
-                await asyncio.sleep(0.5)
-
-            except Exception as e:
-                logger.error(f"Erreur monitor_presence: {e}")
-                await asyncio.sleep(1.0)
-
     async def _audio_stream_handler(self):
         # Tâche de gestion du flux audio.
         while self._running:
@@ -1172,7 +1135,6 @@ class Orchestrator:
         # Démarrer les tâches
         self._tasks = [
             asyncio.create_task(self._process_events()),
-            asyncio.create_task(self._monitor_presence()),
             asyncio.create_task(self._audio_stream_handler()),
             asyncio.create_task(self._video_stream_handler()),
         ]
@@ -1242,7 +1204,6 @@ class Orchestrator:
         # Retourne le contexte actuel.
         return {
             "session_id": self.context.session_id,
-            "person_detected": self.context.person_detected,
             "current_product": self.context.current_product_name,
             "current_ean": self.context.current_ean,
             "vlm_confidence": self.context.vlm_confidence,
@@ -1292,13 +1253,7 @@ async def test_orchestrator():
     print("\n[2] Simulation d'interaction")
     print("-" * 50)
 
-    # Personne détectée
-    print("  → Personne détectée")
-    await orchestrator.send_event(Event.PERSON_DETECTED)
-    await asyncio.sleep(0.5)
-    print(f"    État: {orchestrator.current_state.name}")
-
-    # Parole détectée
+    # Début d'interaction sans détection de présence
     print("  → Parole détectée")
     await orchestrator.send_event(Event.SPEECH_DETECTED, {"text": "Bonjour"})
     await asyncio.sleep(0.5)
@@ -1310,12 +1265,18 @@ async def test_orchestrator():
     await asyncio.sleep(0.5)
     print(f"    État: {orchestrator.current_state.name}")
 
-    # VLM haute confiance
-    print("  → VLM haute confiance")
-    await orchestrator.send_event(Event.VLM_HIGH_CONFIDENCE, {
-        "product_name": "Klorane Shampooing Camomille",
-        "confidence": 0.92
+    # VLM moyenne confiance
+    print("  → VLM moyenne confiance")
+    await orchestrator.send_event(Event.VLM_MEDIUM_CONFIDENCE, {
+        "candidates": [{"name": "Klorane Shampooing Camomille", "score": 0.81}],
+        "confidence": 0.81,
     })
+    await asyncio.sleep(0.5)
+    print(f"    État: {orchestrator.current_state.name}")
+
+    # Sélection utilisateur dans Top-3
+    print("  → Produit confirmé (Top-3)")
+    await orchestrator.send_event(Event.USER_SELECTED)
     await asyncio.sleep(0.5)
     print(f"    État: {orchestrator.current_state.name}")
 
@@ -1331,9 +1292,9 @@ async def test_orchestrator():
     await asyncio.sleep(0.5)
     print(f"    État: {orchestrator.current_state.name}")
 
-    # Personne partie
-    print("  → Personne partie")
-    await orchestrator.send_event(Event.PERSON_LEFT)
+    # Timeout pour retour IDLE
+    print("  → Timeout")
+    await orchestrator.send_event(Event.TIMEOUT)
     await asyncio.sleep(0.5)
     print(f"    État: {orchestrator.current_state.name}")
 

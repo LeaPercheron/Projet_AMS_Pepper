@@ -26,9 +26,9 @@ Le systeme pilote un assistant Pepper pour les shampooings:
 
 ### Vision
 - `src/assistant/vision/vision_module.py`
-  - VLM (MLX local)
+  - vision prioritaire OpenAI, fallback VLM (MLX local)
   - detection barcode (`pyzbar`)
-  - arbitrage confiance (high/medium/low)
+  - arbitrage Top-3 prioritaire, puis fallback barcode
 
 ### Voix
 - `src/assistant/llm/voice_fallback.py`
@@ -57,8 +57,8 @@ Le systeme pilote un assistant Pepper pour les shampooings:
 ### Flux scan visuel
 1. tablette -> `start_visual_scan`
 2. backend capture frames camera
-3. VLM identifie ou demande confirmation Top-3
-4. si echec VLM -> fallback scan code-barres
+3. vision propose un Top-3 pour confirmation utilisateur
+4. si confiance visuelle insuffisante -> fallback scan code-barres
 5. backend pousse resultat tablette + feedback vocal Pepper
 
 ### Flux scan code-barres
@@ -101,7 +101,8 @@ Le systeme pilote un assistant Pepper pour les shampooings:
 
 ## Resilience
 
-- VLM indisponible -> barcode prioritaire
+- OpenAI Vision indisponible -> fallback VLM local
+- vision insuffisante -> fallback barcode
 - Realtime indisponible -> HTTP fallback vocal
 - anti double-clic scan cote tablette (`scanInProgress`)
 - lock temporaire fiche produit pour ignorer ecrasements UI tardifs
@@ -114,4 +115,3 @@ Le systeme pilote un assistant Pepper pour les shampooings:
 
 Condition cle:
 - Pepper doit pouvoir joindre l'URL `tablet-url` fournie a `assistant.main`.
-

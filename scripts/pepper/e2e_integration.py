@@ -114,7 +114,7 @@ def main() -> int:
     print("\n" + "=" * 70)
     print("C2 - Scenarios coeur produit")
     print("=" * 70)
-    results.append(_prompt_step("C2.1", "Produit bien visible -> identification directe"))
+    results.append(_prompt_step("C2.1", "Produit bien visible -> proposition Top-3 puis confirmation"))
     results.append(_prompt_step("C2.2", "Produit a l'envers -> Top-3 ou barcode"))
     results.append(_prompt_step("C2.3", "Produit hors rayon capillaire -> refus"))
     results.append(_prompt_step("C2.4", "Echec VLM + EAN -> scan barcode dedie puis 'pas dans base'"))

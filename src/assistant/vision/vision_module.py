@@ -25,7 +25,7 @@ PEPPER_CAMERA_HEIGHT = 480
 VLM_TARGET_SIZE = 448  # Taille optimale pour VLM
 
 # Seuils de confiance
-CONFIDENCE_HIGH = 0.85  # Affichage direct
+CONFIDENCE_HIGH = 0.85  # Top-3 prioritaire
 CONFIDENCE_MEDIUM = 0.60  # Top-3 avec confirmation
 CONFIDENCE_LOW = 0.60  # Fallback code-barres
 
@@ -764,7 +764,7 @@ class VLMModule:
             in {"1", "true", "yes", "on"}
         )
         self._backend_preference = (
-            os.getenv("PEPPER_VLM_BACKEND", "auto").strip().lower() or "auto"
+            os.getenv("PEPPER_VLM_BACKEND", "openai").strip().lower() or "openai"
         )
 
         # Base de produits pour matching
@@ -1408,29 +1408,10 @@ class VisionPipeline:
                 message="Aucune image fournie"
             )
 
-        # 1. Détection code-barres en parallèle
-        barcode_start = time.time()
-        barcode_result = self.barcode_detector.detect_in_images(images)
-        barcode_time = (time.time() - barcode_start) * 1000
+        barcode_result = None
+        barcode_time = 0.0
 
-        # 2. Si code-barres fiable (2+ images), utiliser directement
-        if barcode_result and barcode_result.confidence >= 0.66:
-            product = self._ean_index.get(barcode_result.ean13)
-            if product:
-                return IdentificationResult(
-                    success=True,
-                    source=IdentificationSource.BARCODE,
-                    product_id=product.get("id"),
-                    product_name=product.get("name"),
-                    brand=product.get("brand"),
-                    confidence=barcode_result.confidence,
-                    barcode_result=barcode_result,
-                    total_time_ms=(time.time() - start_time) * 1000,
-                    barcode_time_ms=barcode_time,
-                    message=f"Produit identifié par code-barres: {product.get('name')}"
-                )
-
-        # 3. Classification préalable (produit capillaire ?)
+        # 1. Classification préalable (produit capillaire ?)
         best_image = images[len(images) // 2]  # Image du milieu
         preprocessed = self.capture.preprocess_for_vlm(best_image)
 
@@ -1449,41 +1430,19 @@ class VisionPipeline:
                 message="Ce n'est pas un produit capillaire. Je ne peux t'aider que pour les produits du rayon cheveux."
             )
 
-        # 4. Identification VLM
+        # 2. Identification visuelle
         vlm_start = time.time()
         vlm_result = self.vlm.identify_product(preprocessed)
         vlm_time = (time.time() - vlm_start) * 1000
 
-        # 5. Arbitrage selon confiance
+        # 3. Arbitrage visuel: TOP-3 prioritaire (jamais affichage direct high).
         total_time = (time.time() - start_time) * 1000
         matched_product, match_score = self._match_product_by_name_with_score(vlm_result.product_name)
-        allow_direct_high = os.getenv("PEPPER_VLM_ALLOW_DIRECT_HIGH", "0").strip().lower() in {"1", "true", "yes", "on"}
-        high_min_match = max(0.0, min(1.0, float(os.getenv("PEPPER_VLM_HIGH_MIN_MATCH", "0.72") or 0.72)))
-
-        # Confiance >= 85% : affichage direct uniquement si explicitement autorisé
-        # ET si le matching en base est solide.
-        if vlm_result.confidence >= CONFIDENCE_HIGH:
-            if allow_direct_high and matched_product and match_score >= high_min_match:
-                return IdentificationResult(
-                    success=True,
-                    source=IdentificationSource.VLM_HIGH,
-                    product_id=matched_product.get("id") if matched_product else None,
-                    product_name=matched_product.get("name") if matched_product else vlm_result.product_name,
-                    brand=matched_product.get("brand") if matched_product else vlm_result.brand,
-                    confidence=min(vlm_result.confidence, match_score),
-                    vlm_result=vlm_result,
-                    barcode_result=barcode_result,
-                    total_time_ms=total_time,
-                    vlm_time_ms=vlm_time,
-                    barcode_time_ms=barcode_time,
-                    message=(
-                        f"J'ai identifié {matched_product.get('brand')} {matched_product.get('name')} "
-                        f"avec une confiance de {min(vlm_result.confidence, match_score)*100:.0f}%"
-                    ),
-                )
-            # Par défaut, un vlm_high devient une proposition à confirmer.
-            # On évite les faux positifs "très confiants" sur image ambiguë.
+        if vlm_result.confidence >= CONFIDENCE_MEDIUM:
             top3 = self.vlm.identify_with_top3(preprocessed)
+            if not top3:
+                top3 = [vlm_result]
+
             candidates = []
             for vlm_r in top3:
                 matched, score = self._match_product_by_name_with_score(vlm_r.product_name)
@@ -1516,48 +1475,23 @@ class VisionPipeline:
                 vlm_time_ms=vlm_time,
                 barcode_time_ms=barcode_time,
                 message=(
-                    "J'ai une proposition visuelle, mais je préfère une confirmation. "
-                    "Choisis le bon produit ou passe au code-barres."
+                    "J'ai une proposition visuelle. "
+                    "Confirme le bon produit dans le Top-3 ou passe au code-barres."
                 ),
             )
 
-        # Confiance 60-85% : Top-3 avec confirmation
-        if vlm_result.confidence >= CONFIDENCE_MEDIUM:
-            top3 = self.vlm.identify_with_top3(preprocessed)
-            candidates = []
+        # 4. Confiance visuelle trop faible: fallback code-barres.
+        barcode_start = time.time()
+        barcode_result = self.barcode_detector.detect_in_images(images)
+        barcode_time = (time.time() - barcode_start) * 1000
+        total_time = (time.time() - start_time) * 1000
 
-            for vlm_r in top3:
-                matched, score = self._match_product_by_name_with_score(vlm_r.product_name)
-                candidates.append(ProductCandidate(
-                    product_id=matched.get("id") if matched else "",
-                    name=(matched.get("name") if matched else vlm_r.product_name),
-                    brand=(matched.get("brand") if matched else vlm_r.brand),
-                    score=max(0.0, min(1.0, min(vlm_r.confidence, score if score > 0 else vlm_r.confidence))),
-                    source="vlm"
-                ))
-
-            return IdentificationResult(
-                success=True,
-                source=IdentificationSource.VLM_MEDIUM,
-                product_name=(matched_product.get("name") if matched_product else vlm_result.product_name),
-                brand=(matched_product.get("brand") if matched_product else vlm_result.brand),
-                confidence=max(0.0, min(1.0, min(vlm_result.confidence, match_score if match_score > 0 else 0.6))),
-                candidates=candidates,
-                vlm_result=vlm_result,
-                barcode_result=barcode_result,
-                total_time_ms=total_time,
-                vlm_time_ms=vlm_time,
-                barcode_time_ms=barcode_time,
-                message=f"Je pense qu'il s'agit de {vlm_result.product_name}, mais je ne suis pas sûr. Peux-tu me montrer le code-barres ?"
-            )
-
-        # Confiance < 60% : fallback code-barres
         if barcode_result:
             product = self._ean_index.get(barcode_result.ean13)
             if product:
                 return IdentificationResult(
                     success=True,
-                    source=IdentificationSource.FALLBACK,
+                    source=IdentificationSource.BARCODE,
                     product_id=product.get("id"),
                     product_name=product.get("name"),
                     brand=product.get("brand"),
@@ -1570,7 +1504,7 @@ class VisionPipeline:
                     message=f"Produit identifié par code-barres: {product.get('name')}"
                 )
 
-        # Échec complet
+        # 5. Échec complet.
         return IdentificationResult(
             success=False,
             source=IdentificationSource.FAILED,
@@ -1845,10 +1779,8 @@ if __name__ == "__main__":
         print("\n[2] TEST LOGIQUE D'ARBITRAGE")
         print("-" * 50)
 
-        print(f"  BARCODE priorité: code-barres fiable (2+ images)")
-        print(f"  VLM_HIGH: confiance >= {CONFIDENCE_HIGH*100:.0f}%")
-        print(f"  VLM_MEDIUM: confiance {CONFIDENCE_MEDIUM*100:.0f}-{CONFIDENCE_HIGH*100:.0f}%")
-        print(f"  FALLBACK: confiance < {CONFIDENCE_MEDIUM*100:.0f}% + code-barres")
+        print(f"  TOP-3 prioritaire: confiance visuelle >= {CONFIDENCE_MEDIUM*100:.0f}%")
+        print(f"  BARCODE fallback: confiance visuelle < {CONFIDENCE_MEDIUM*100:.0f}%")
 
     pipeline.shutdown()
     print("\n" + "=" * 70)
