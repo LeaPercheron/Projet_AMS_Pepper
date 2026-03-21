@@ -1,3 +1,0 @@
-[console_scripts]
-parapharma = assistant.main:main
-parapharma-demo = scripts.run_demo:main
