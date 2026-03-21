@@ -181,6 +181,8 @@ class VisionEvaluator:
             images = []
             for ext in ['jpg', 'jpeg', 'png']:
                 images.extend(sorted(case_dir.glob(f"*.{ext}")))
+            if not images:
+                print(f"  [WARN] {case_dir.name}: aucune image trouvée (*.jpg/*.jpeg/*.png)")
 
             return {
                 "name": case_dir.name,
@@ -348,6 +350,10 @@ class VisionEvaluator:
             source = result.source.upper()
 
             print(f"  [{status}] Source: {source}, Conf: {result.confidence*100:.0f}%")
+            if result.error:
+                print(f"       Erreur: {result.error}")
+            elif not result.success:
+                print("       Erreur: cas non validé (ni barcode, ni VLM attendu)")
 
             if self.verbose:
                 print(f"       Identifie: {result.identified_product}")
@@ -355,8 +361,6 @@ class VisionEvaluator:
                 print(f"       Barcode: {result.barcode_ean} (trouve: {result.barcode_found})")
                 print(f"       Top-1: {result.vlm_top1_match}, Top-3: {result.vlm_top3_match}")
                 print(f"       Temps: {result.total_time_ms:.0f}ms")
-                if result.error:
-                    print(f"       Erreur: {result.error}")
             print()
 
         # Calculer les metriques

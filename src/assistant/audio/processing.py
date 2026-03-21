@@ -71,107 +71,145 @@ class Beamformer:
     def __init__(self, config: AudioConfig):
         # Initialise l'objet.
         self.config = config
+        self.channels = max(1, int(config.input_channels or 1))
 
         # Poids normalisés
-        total_weight = (config.front_weight + config.rear_weight +
-                        2 * config.side_weight)
-        self.weights = np.array([
-            config.front_weight / total_weight,   # Front
-            config.rear_weight / total_weight,    # Rear
-            config.side_weight / total_weight,    # Left
-            config.side_weight / total_weight     # Right
-        ])
+        if self.channels == 1:
+            self.weights = np.array([1.0], dtype=np.float64)
+        elif self.channels == 4:
+            total_weight = (config.front_weight + config.rear_weight +
+                            2 * config.side_weight)
+            if total_weight <= 0:
+                total_weight = 1.0
+            self.weights = np.array([
+                config.front_weight / total_weight,   # Front
+                config.rear_weight / total_weight,    # Rear
+                config.side_weight / total_weight,    # Left
+                config.side_weight / total_weight     # Right
+            ], dtype=np.float64)
+        else:
+            self.weights = np.ones(self.channels, dtype=np.float64) / self.channels
 
         # Buffer pour mode adaptatif
         self._energy_history = []
         self._max_history = 50
 
-    def process(self, audio_4ch: np.ndarray,
+    def process(self, audio_data: np.ndarray,
                 # Traite l'action.
                 mode: BeamformingMode = BeamformingMode.WEIGHTED_SUM) -> np.ndarray:
         """
-        Applique le beamforming sur l'audio 4 canaux.
+        Applique le beamforming sur l'audio multicanal.
 
         Args:
-            audio_4ch: Array (samples, 4) avec les 4 canaux
+            audio_data: Array (samples, channels) ou 1D interleavé
             mode: Mode de beamforming
 
         Returns:
             Array mono (samples,)
         """
-        if audio_4ch.ndim == 1:
+        if audio_data.size == 0:
+            return np.zeros((0,), dtype=np.float64)
+
+        audio_nch = np.asarray(audio_data, dtype=np.float64)
+        if audio_nch.ndim == 1:
             # Désentrelacer si nécessaire
-            audio_4ch = self._deinterleave(audio_4ch, 4)
+            audio_nch = self._deinterleave(audio_nch, self.channels)
+
+        if audio_nch.ndim == 1:
+            audio_nch = audio_nch.reshape(-1, 1)
+
+        channels = audio_nch.shape[1]
+        if channels <= 1:
+            return audio_nch[:, 0] if audio_nch.size else np.zeros((0,), dtype=np.float64)
+
+        if channels != self.channels:
+            self.channels = channels
+            if self.weights.size != channels:
+                self.weights = np.ones(channels, dtype=np.float64) / channels
 
         if mode == BeamformingMode.WEIGHTED_SUM:
-            return self._weighted_sum(audio_4ch)
+            return self._weighted_sum(audio_nch)
         elif mode == BeamformingMode.DELAY_AND_SUM:
-            return self._delay_and_sum(audio_4ch)
+            return self._delay_and_sum(audio_nch)
         elif mode == BeamformingMode.ADAPTIVE:
-            return self._adaptive(audio_4ch)
+            return self._adaptive(audio_nch)
         else:
-            return self._weighted_sum(audio_4ch)
+            return self._weighted_sum(audio_nch)
 
-    def _weighted_sum(self, audio_4ch: np.ndarray) -> np.ndarray:
+    def _weighted_sum(self, audio_nch: np.ndarray) -> np.ndarray:
         # Beamforming par somme pondérée simple.
-        # audio_4ch shape: (samples, 4)
-        mono = np.zeros(audio_4ch.shape[0], dtype=np.float64)
+        # audio_nch shape: (samples, channels)
+        if audio_nch.size == 0:
+            return np.zeros((0,), dtype=np.float64)
+        channels = audio_nch.shape[1]
+        if channels <= 0:
+            return np.zeros((0,), dtype=np.float64)
+        if channels == 1:
+            return audio_nch[:, 0]
 
-        for ch in range(4):
-            mono += self.weights[ch] * audio_4ch[:, ch]
+        if self.weights.size != channels:
+            weights = np.ones(channels, dtype=np.float64) / channels
+        else:
+            weights = self.weights
+        return np.matmul(audio_nch, weights[:channels])
 
-        return mono
-
-    def _delay_and_sum(self, audio_4ch: np.ndarray) -> np.ndarray:
+    def _delay_and_sum(self, audio_nch: np.ndarray) -> np.ndarray:
         # Beamforming avec compensation de délai.
-        # Distance entre micros Pepper ~10cm
-        # Vitesse du son ~343 m/s
-        # Délai max ~0.3ms = ~14 samples à 48kHz
-
         # Délais en samples (approximatifs pour source frontale)
         delays = [0, 14, 7, 7]  # Front, Rear, Left, Right
+        channels = audio_nch.shape[1] if audio_nch.ndim > 1 else 1
+        if channels <= 1:
+            return audio_nch[:, 0] if audio_nch.size else np.zeros((0,), dtype=np.float64)
+        if channels > len(delays):
+            delays = delays + [7] * (channels - len(delays))
 
-        mono = np.zeros(audio_4ch.shape[0], dtype=np.float64)
+        mono = np.zeros(audio_nch.shape[0], dtype=np.float64)
 
-        for ch in range(4):
-            delay = delays[ch]
+        for ch in range(channels):
+            delay = delays[ch] if ch < len(delays) else 0
             if delay > 0:
                 # Décaler le signal
-                shifted = np.roll(audio_4ch[:, ch], -delay)
+                shifted = np.roll(audio_nch[:, ch], -delay)
                 shifted[-delay:] = 0  # Zéros à la fin
             else:
-                shifted = audio_4ch[:, ch]
+                shifted = audio_nch[:, ch]
 
-            mono += self.weights[ch] * shifted
+            w = self.weights[ch] if ch < len(self.weights) else (1.0 / channels)
+            mono += w * shifted
 
         return mono
 
-    def _adaptive(self, audio_4ch: np.ndarray) -> np.ndarray:
+    def _adaptive(self, audio_nch: np.ndarray) -> np.ndarray:
         # Beamforming adaptatif basé sur l'énergie.
         # Calculer l'énergie par canal
-        energies = np.array([np.sum(audio_4ch[:, ch]**2) for ch in range(4)])
+        channels = audio_nch.shape[1] if audio_nch.ndim > 1 else 1
+        if channels <= 1:
+            return audio_nch[:, 0] if audio_nch.size else np.zeros((0,), dtype=np.float64)
+
+        energies = np.array([np.sum(audio_nch[:, ch]**2) for ch in range(channels)])
 
         # Éviter division par zéro
         total_energy = np.sum(energies) + 1e-10
 
         # Poids adaptatifs (combinaison fixe + adaptatif)
         adaptive_weights = energies / total_energy
-        combined_weights = 0.7 * self.weights + 0.3 * adaptive_weights
+        base_weights = self.weights if self.weights.size == channels else (
+            np.ones(channels, dtype=np.float64) / channels
+        )
+        combined_weights = 0.7 * base_weights + 0.3 * adaptive_weights
 
         # Normaliser
         combined_weights /= np.sum(combined_weights)
-
-        # Appliquer
-        mono = np.zeros(audio_4ch.shape[0], dtype=np.float64)
-        for ch in range(4):
-            mono += combined_weights[ch] * audio_4ch[:, ch]
-
-        return mono
+        return np.matmul(audio_nch, combined_weights)
 
     def _deinterleave(self, interleaved: np.ndarray, channels: int) -> np.ndarray:
         # Convertit audio interleaved en (samples, channels).
+        if channels <= 0:
+            channels = 1
         samples_per_channel = len(interleaved) // channels
-        return interleaved.reshape(samples_per_channel, channels)
+        if samples_per_channel <= 0:
+            return np.zeros((0, channels), dtype=np.float64)
+        return interleaved[:samples_per_channel * channels].reshape(samples_per_channel, channels)
 
 
 # RÉDUCTION DE BRUIT
@@ -505,7 +543,7 @@ class AudioProcessor:
         Traite l'audio brut depuis Pepper vers format OpenAI.
 
         Args:
-            audio_bytes: Audio brut PCM16 4 canaux interleaved 48kHz
+            audio_bytes: Audio brut PCM16 interleavé
             beamforming_mode: Mode de beamforming
 
         Returns:
@@ -519,12 +557,18 @@ class AudioProcessor:
         self.stats.input_samples = len(audio_4ch)
         self.stats.input_level_db = self._calculate_level_db(audio_4ch.flatten())
 
-        # 2. Beamforming 4ch → mono
-        if self.config.beamforming_enabled:
-            mono = self.beamformer.process(audio_4ch, beamforming_mode)
+        # 2. Beamforming -> mono
+        if self.config.input_channels <= 1 or not self.config.beamforming_enabled:
+            mono = audio_4ch[:, 0] if audio_4ch.ndim == 2 and audio_4ch.shape[1] > 0 else np.zeros((0,), dtype=np.float64)
         else:
-            # Fallback: moyenne simple
-            mono = np.mean(audio_4ch, axis=1)
+            mono = self.beamformer.process(audio_4ch, beamforming_mode)
+
+        if mono.size == 0:
+            self.stats.output_samples = 0
+            self.stats.output_level_db = 0.0
+            self.stats.gain_applied_db = 0.0
+            self.stats.processing_time_ms = (time.time() - start_time) * 1000
+            return b""
 
         # 3. Filtre passe-haut
         mono = self.highpass.process(mono)
@@ -569,10 +613,20 @@ class AudioProcessor:
             Array mono 24kHz float
         """
         # 2. Beamforming
-        if self.config.beamforming_enabled:
-            mono = self.beamformer.process(audio_4ch, beamforming_mode)
+        if audio_4ch is None:
+            return np.zeros((0,), dtype=np.float64)
+        if audio_4ch.size == 0:
+            return np.zeros((0,), dtype=np.float64)
+        if audio_4ch.ndim == 1:
+            audio_4ch = audio_4ch.reshape(-1, 1)
+
+        if self.config.input_channels <= 1 or not self.config.beamforming_enabled:
+            mono = audio_4ch[:, 0] if audio_4ch.shape[1] > 0 else np.zeros((0,), dtype=np.float64)
         else:
-            mono = np.mean(audio_4ch, axis=1)
+            mono = self.beamformer.process(audio_4ch, beamforming_mode)
+
+        if mono.size == 0:
+            return np.zeros((0,), dtype=np.float64)
 
         # 3-6. Filtres
         mono = self.highpass.process(mono)
@@ -587,6 +641,12 @@ class AudioProcessor:
 
     def _decode_pcm16(self, data: bytes, channels: int) -> np.ndarray:
         # Décode PCM16 interleaved en float array (samples, channels).
+        if not data:
+            return np.zeros((0, max(1, int(channels or 1))), dtype=np.float64)
+
+        if channels <= 0:
+            channels = 1
+
         num_samples = len(data) // 2  # 2 bytes par sample
         samples = struct.unpack(f'<{num_samples}h', data)
 
@@ -595,6 +655,9 @@ class AudioProcessor:
 
         # Reshape en (samples_per_channel, channels)
         samples_per_channel = len(float_samples) // channels
+        if samples_per_channel <= 0:
+            return np.zeros((0, channels), dtype=np.float64)
+        float_samples = float_samples[:samples_per_channel * channels]
         return float_samples.reshape(samples_per_channel, channels)
 
     def _encode_pcm16(self, audio: np.ndarray) -> bytes:

@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheProject xmlns="http://www.ald.softbankrobotics.com/schema/choregraphe/project.xsd" xar_version="3">
+  <Box name="root" id="-1" localization="8" tooltip="Root box of Choregraphe&apos;s behavior. Highest level possible." x="0" y="0">
+    <bitmap>media/images/box/root.png</bitmap>
+    <script language="4">
+      <content>
+        <![CDATA[]]>
+      </content>
+    </script>
+    <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+    <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+    <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+    <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="4" />
+    <Timeline enable="0">
+      <BehaviorLayer name="behavior_layer1">
+        <BehaviorKeyframe name="keyframe1" index="1">
+          <Diagram>
+            <Box name="BridgeSupervisor" id="1" localization="8" tooltip="This box contains a basic python script and can be used to create any python script box you would like.&#x0A;&#x0A;To edit its script, double-click on it." x="412" y="239">
+              <bitmap>media/images/box/box-python-script.png</bitmap>
+              <script language="4">
+                <content>
+                  <![CDATA[
+import socket
+import struct
+import threading
+import time
+
+
+class MyClass(GeneratedClass):
+
+    MAC_IP = "192.168.1.50"   # TODO: set your Mac LAN IP
+    AUDIO_PORT = 5555         # Pepper -> Mac audio
+    VIDEO_PORT = 5557         # Pepper -> Mac video
+    CONTROL_PORT = 5558       # Mac -> Pepper text commands
+
+    AUDIO_SAMPLE_RATE = 16000
+    # ALAudioDevice channel flag: 0 all, 3 front
+    AUDIO_CHANNEL_FLAG = 3
+    AUDIO_DEINTERLEAVE = 0
+
+    CAMERA_ID = 0
+    # AL_kQVGA = 1 (320x240), AL_kVGA = 2 (640x480)
+    CAMERA_RESOLUTION = 1
+    # AL_kRGBColorSpace = 11
+    CAMERA_COLOR_SPACE = 11
+    CAMERA_FPS = 8
+
+    FRAME_HEADER_FMT = "<III"  # len + ts_sec + ts_usec
+    FRAME_HEADER_SIZE = struct.calcsize(FRAME_HEADER_FMT)
+    CONTROL_PREFIX = "TTS:"
+
+    def __init__(self):
+        GeneratedClass.__init__(self)
+        self._running = False
+
+        self._audio_service = None
+        self._video_service = None
+        self._tts_service = None
+
+        self._audio_sock = None
+        self._video_sock = None
+        self._audio_lock = threading.Lock()
+        self._video_lock = threading.Lock()
+        self._last_audio_reconnect = 0.0
+        self._last_video_reconnect = 0.0
+
+        self._video_handle = None
+        self._video_thread = None
+        self._control_thread = None
+        self._control_server = None
+
+    def onLoad(self):
+        try:
+            session = self.session()
+            self._audio_service = session.service("ALAudioDevice")
+            self._video_service = session.service("ALVideoDevice")
+            self._tts_service = session.service("ALTextToSpeech")
+            self.logger.info("[Bridge] Services ALAudioDevice/ALVideoDevice/ALTextToSpeech OK")
+        except Exception as e:
+            self.logger.error("[Bridge] Service init error: %s" % str(e))
+
+    def onUnload(self):
+        self._stop_bridge()
+
+    def onInput_onStart(self):
+        if self._running:
+            return
+        self._running = True
+
+        try:
+            self._connect_audio_socket(force=True)
+            self._connect_video_socket(force=True)
+            self._start_audio_subscription()
+            self._start_video_loop()
+            self._start_control_server()
+            self.logger.info("[Bridge] Started")
+        except Exception as e:
+            self.logger.error("[Bridge] Start error: %s" % str(e))
+            self._stop_bridge()
+            self.onStopped()
+
+    def onInput_onStop(self):
+        self._stop_bridge()
+        self.onStopped()
+
+    # ===== Audio path: Pepper -> Mac:5555 =====
+
+    def _start_audio_subscription(self):
+        if not self._audio_service:
+            return
+        try:
+            self._audio_service.setClientPreferences(
+                self.getName(),
+                int(self.AUDIO_SAMPLE_RATE),
+                int(self.AUDIO_CHANNEL_FLAG),
+                int(self.AUDIO_DEINTERLEAVE),
+            )
+            self._audio_service.subscribe(self.getName())
+            self.logger.info("[Bridge] Audio subscribed")
+        except Exception as e:
+            self.logger.error("[Bridge] Audio subscribe error: %s" % str(e))
+
+    def processRemote(self, nbOfChannels, nbrOfSamplesByChannel, aTimeStamp, buffer):
+        if not self._running:
+            return
+        if not buffer:
+            return
+
+        ts_sec = 0
+        ts_usec = 0
+        try:
+            if aTimeStamp and len(aTimeStamp) >= 2:
+                ts_sec = int(aTimeStamp[0])
+                ts_usec = int(aTimeStamp[1])
+            else:
+                now = time.time()
+                ts_sec = int(now)
+                ts_usec = int((now - ts_sec) * 1000000)
+        except Exception:
+            now = time.time()
+            ts_sec = int(now)
+            ts_usec = int((now - ts_sec) * 1000000)
+
+        payload = buffer
+        self._send_audio_frame(payload, ts_sec, ts_usec)
+
+    def _send_audio_frame(self, payload, ts_sec, ts_usec):
+        if not payload:
+            return
+        try:
+            self._connect_audio_socket(force=False)
+            if not self._audio_sock:
+                return
+            header = struct.pack(self.FRAME_HEADER_FMT, len(payload), int(ts_sec), int(ts_usec))
+            with self._audio_lock:
+                self._audio_sock.sendall(header + payload)
+        except Exception:
+            self._close_audio_socket()
+
+    def _connect_audio_socket(self, force=False):
+        if self._audio_sock:
+            return
+        now = time.time()
+        if not force and (now - self._last_audio_reconnect) < 1.0:
+            return
+        self._last_audio_reconnect = now
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.connect((self.MAC_IP, int(self.AUDIO_PORT)))
+            self._audio_sock = sock
+            self.logger.info("[Bridge] Audio connected to %s:%s" % (self.MAC_IP, self.AUDIO_PORT))
+        except Exception:
+            self._audio_sock = None
+
+    def _close_audio_socket(self):
+        if self._audio_sock:
+            try:
+                self._audio_sock.close()
+            except Exception:
+                pass
+        self._audio_sock = None
+
+    # ===== Video path: Pepper -> Mac:5557 =====
+
+    def _start_video_loop(self):
+        if not self._video_service:
+            return
+        if self._video_thread and self._video_thread.is_alive():
+            return
+        try:
+            self._video_handle = self._video_service.subscribeCamera(
+                self.getName() + "_cam",
+                int(self.CAMERA_ID),
+                int(self.CAMERA_RESOLUTION),
+                int(self.CAMERA_COLOR_SPACE),
+                int(self.CAMERA_FPS),
+            )
+            self.logger.info("[Bridge] Video subscribed")
+        except Exception as e:
+            self.logger.error("[Bridge] Video subscribe error: %s" % str(e))
+            self._video_handle = None
+            return
+
+        self._video_thread = threading.Thread(target=self._video_loop)
+        self._video_thread.daemon = True
+        self._video_thread.start()
+
+    def _video_loop(self):
+        sleep_s = 1.0 / float(max(1, int(self.CAMERA_FPS)))
+        while self._running:
+            try:
+                if not self._video_handle:
+                    time.sleep(sleep_s)
+                    continue
+                frame = self._video_service.getImageRemote(self._video_handle)
+                if not frame or len(frame) < 7:
+                    time.sleep(sleep_s)
+                    continue
+
+                ts_sec = int(frame[4]) if frame[4] is not None else int(time.time())
+                ts_usec = int(frame[5]) if frame[5] is not None else 0
+                payload = frame[6]
+                if payload:
+                    self._send_video_frame(payload, ts_sec, ts_usec)
+            except Exception:
+                self._close_video_socket()
+            time.sleep(sleep_s)
+
+    def _send_video_frame(self, payload, ts_sec, ts_usec):
+        try:
+            self._connect_video_socket(force=False)
+            if not self._video_sock:
+                return
+            header = struct.pack(self.FRAME_HEADER_FMT, len(payload), int(ts_sec), int(ts_usec))
+            with self._video_lock:
+                self._video_sock.sendall(header + payload)
+        except Exception:
+            self._close_video_socket()
+
+    def _connect_video_socket(self, force=False):
+        if self._video_sock:
+            return
+        now = time.time()
+        if not force and (now - self._last_video_reconnect) < 1.0:
+            return
+        self._last_video_reconnect = now
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.connect((self.MAC_IP, int(self.VIDEO_PORT)))
+            self._video_sock = sock
+            self.logger.info("[Bridge] Video connected to %s:%s" % (self.MAC_IP, self.VIDEO_PORT))
+        except Exception:
+            self._video_sock = None
+
+    def _close_video_socket(self):
+        if self._video_sock:
+            try:
+                self._video_sock.close()
+            except Exception:
+                pass
+        self._video_sock = None
+
+    # ===== Control path: Mac: -> Pepper:5558 (TTS) =====
+
+    def _start_control_server(self):
+        if self._control_thread and self._control_thread.is_alive():
+            return
+        self._control_thread = threading.Thread(target=self._control_loop)
+        self._control_thread.daemon = True
+        self._control_thread.start()
+
+    def _control_loop(self):
+        try:
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(("0.0.0.0", int(self.CONTROL_PORT)))
+            srv.listen(1)
+            srv.settimeout(1.0)
+            self._control_server = srv
+            self.logger.info("[Bridge] Control server listening on 0.0.0.0:%s" % self.CONTROL_PORT)
+        except Exception as e:
+            self.logger.error("[Bridge] Control server error: %s" % str(e))
+            self._control_server = None
+            return
+
+        while self._running:
+            try:
+                conn, addr = self._control_server.accept()
+            except socket.timeout:
+                continue
+            except Exception:
+                break
+
+            try:
+                self.logger.info("[Bridge] Control client connected: %s" % str(addr))
+                while self._running:
+                    payload = self._recv_typed_frame(conn)
+                    if payload is None:
+                        break
+                    self._handle_control_payload(payload)
+            except Exception:
+                pass
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        self._close_control_server()
+
+    def _recv_typed_frame(self, conn):
+        header = self._recv_exact(conn, self.FRAME_HEADER_SIZE)
+        if not header:
+            return None
+        size, ts_sec, ts_usec = struct.unpack(self.FRAME_HEADER_FMT, header)
+        if size <= 0:
+            return None
+        payload = self._recv_exact(conn, int(size))
+        return payload
+
+    def _recv_exact(self, conn, size):
+        data = b""
+        while len(data) < size:
+            chunk = conn.recv(size - len(data))
+            if not chunk:
+                return None
+            data += chunk
+        return data
+
+    def _handle_control_payload(self, payload):
+        if not payload:
+            return
+        try:
+            prefix_b = self.CONTROL_PREFIX.encode("utf-8")
+            if payload.startswith(prefix_b):
+                text = payload[len(prefix_b):]
+                try:
+                    text = text.decode("utf-8", "ignore")
+                except Exception:
+                    pass
+                if text and self._tts_service:
+                    self._tts_service.say(text)
+        except Exception as e:
+            self.logger.error("[Bridge] TTS command error: %s" % str(e))
+
+    def _close_control_server(self):
+        if self._control_server:
+            try:
+                self._control_server.close()
+            except Exception:
+                pass
+        self._control_server = None
+
+    # ===== Stop / cleanup =====
+
+    def _stop_bridge(self):
+        if not self._running:
+            return
+        self._running = False
+
+        try:
+            if self._audio_service:
+                self._audio_service.unsubscribe(self.getName())
+        except Exception:
+            pass
+
+        try:
+            if self._video_service and self._video_handle:
+                self._video_service.unsubscribe(self._video_handle)
+        except Exception:
+            pass
+        self._video_handle = None
+
+        self._close_audio_socket()
+        self._close_video_socket()
+        self._close_control_server()
+
+        if self._video_thread:
+            self._video_thread.join(1.0)
+            self._video_thread = None
+        if self._control_thread:
+            self._control_thread.join(1.0)
+            self._control_thread = None
+
+        self.logger.info("[Bridge] Stopped")]]>
+                </content>
+              </script>
+              <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+              <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+              <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+              <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="4" />
+            </Box>
+            <Link inputowner="1" indexofinput="2" outputowner="0" indexofoutput="2" />
+            <Link inputowner="0" indexofinput="4" outputowner="1" indexofoutput="4" />
+          </Diagram>
+        </BehaviorKeyframe>
+      </BehaviorLayer>
+    </Timeline>
+  </Box>
+</ChoregrapheProject>

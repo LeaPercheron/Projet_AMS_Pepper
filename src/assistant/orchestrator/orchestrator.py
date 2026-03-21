@@ -428,6 +428,7 @@ class Orchestrator:
         self._robot_actions = None
         self._audio_processor = None
         self._fallback_audio_handler = None
+        self._audio_processor_format: Optional[Dict[str, int]] = None
 
         # Micro-phrases pré-chargées
         self._phrases_cache: Dict[str, List[str]] = MICRO_PHRASES.copy()
@@ -472,6 +473,55 @@ class Orchestrator:
     def set_audio_module(self, module):
         # Injecte le module audio.
         self._audio_module = module
+
+    def _build_audio_processor_config(self):
+        # Détermine le format d'entrée effectif du module audio.
+        try:
+            from assistant.audio import get_preset_config
+            config = get_preset_config("noisy_room")
+        except Exception:
+            return None
+
+        fmt = {"sample_rate": 48000, "channels": 4}
+        if self._audio_module:
+            getter = None
+            if hasattr(self._audio_module, "get_audio_active_format"):
+                getter = self._audio_module.get_audio_active_format
+            elif hasattr(self._audio_module, "get_audio_capture_format"):
+                getter = self._audio_module.get_audio_capture_format
+            if getter:
+                try:
+                    module_fmt = getter() or {}
+                    if isinstance(module_fmt, dict):
+                        sr = int(module_fmt.get("sample_rate", 0) or 0)
+                        ch = int(module_fmt.get("channels", 0) or 0)
+                        if sr > 0:
+                            fmt["sample_rate"] = sr
+                        if ch > 0:
+                            fmt["channels"] = ch
+                except Exception:
+                    pass
+
+        sr = int(fmt.get("sample_rate") or 0)
+        ch = int(fmt.get("channels") or 0)
+
+        if sr <= 0:
+            sr = 48000
+        if ch <= 0:
+            ch = 1
+        if ch > 8:
+            # Garde-fou: éviter un état incohérent sur des formats inattendus.
+            ch = 1
+
+        config.input_sample_rate = sr
+        config.input_channels = ch
+
+        self._audio_processor_format = {
+            "sample_rate": sr,
+            "channels": ch,
+            "sample_width": 2
+        }
+        return config
 
     def set_video_module(self, module):
         # Injecte le module vidéo.
@@ -951,8 +1001,17 @@ class Orchestrator:
 
         if self._audio_processor is None:
             try:
-                from assistant.audio import AudioProcessor, get_preset_config
-                self._audio_processor = AudioProcessor(get_preset_config("noisy_room"))
+                from assistant.audio import AudioProcessor
+                config = self._build_audio_processor_config()
+                if config is None or not config.input_sample_rate or not config.input_channels:
+                    raise RuntimeError("format audio inconnu")
+                self._audio_processor = AudioProcessor(config)
+                logger.info(
+                    f"AudioProcessor actif: {config.input_sample_rate}Hz / "
+                    f"{config.input_channels}ch (beamforming={'on' if config.beamforming_enabled else 'off'})"
+                )
+                if config.input_channels <= 1:
+                    logger.info("AudioProcessor: format mono -> beamforming bypassé")
             except Exception as e:
                 logger.warning(f"AudioProcessor indisponible: {e}")
                 self._audio_processor = None
@@ -1231,22 +1290,32 @@ class Orchestrator:
 
     def get_stats(self) -> Dict:
         # Retourne les statistiques.
+        audio_format = None
+        if self._audio_processor_format:
+            audio_format = dict(self._audio_processor_format)
         return {
             **self._stats,
             "current_state": self.state_machine.state.name,
             "time_in_state": self.state_machine.time_in_state,
-            "session_id": self.context.session_id
+            "session_id": self.context.session_id,
+            "audio_processor_active": bool(self._audio_processor),
+            "audio_format": audio_format,
         }
 
     def get_context(self) -> Dict:
         # Retourne le contexte actuel.
+        audio_format = None
+        if self._audio_processor_format:
+            audio_format = dict(self._audio_processor_format)
+
         return {
             "session_id": self.context.session_id,
             "person_detected": self.context.person_detected,
             "current_product": self.context.current_product_name,
             "current_ean": self.context.current_ean,
             "vlm_confidence": self.context.vlm_confidence,
-            "last_input": self.context.last_user_input
+            "last_input": self.context.last_user_input,
+            "audio_format": audio_format,
         }
 
     def set_current_product_context(

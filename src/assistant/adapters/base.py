@@ -26,6 +26,7 @@ class AdapterConfig:
     # Audio
     audio_capture_port: int = 5555
     audio_playback_port: int = 5556
+    video_capture_port: int = 5557
     sample_rate: int = 48000
     channels_in: int = 4
     channels_out: int = 2
@@ -191,3 +192,15 @@ class RobotAdapter(ABC):
     def get_status(self) -> dict:
         # Retourne l'etat du robot.
         pass
+
+    def get_audio_capture_format(self) -> dict:
+        # Format audio déclaré par l'adaptateur.
+        return {
+            "sample_rate": int(self.config.sample_rate),
+            "channels": int(self.config.channels_in),
+            "sample_width": 2,
+        }
+
+    def get_audio_active_format(self) -> dict:
+        # Format audio observé en runtime (fallback: format déclaré).
+        return self.get_audio_capture_format()

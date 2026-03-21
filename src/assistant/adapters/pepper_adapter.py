@@ -529,6 +529,16 @@ class PepperAdapter(RobotAdapter):
         self._audio_pull_mode = False
         print("[Pepper] Capture audio arretee")
 
+    def get_audio_active_format(self) -> dict:
+        # Format réel du flux audio détecté.
+        channels = int(self._audio_pull_detected_channels or self.config.channels_in)
+        sample_rate = int(self._audio_pull_detected_rate or self.config.sample_rate)
+        return {
+            "sample_rate": sample_rate,
+            "channels": max(1, channels),
+            "sample_width": 2,
+        }
+
     def play_audio(self, audio_bytes: bytes) -> bool:
         # Joue de l'audio sur les haut-parleurs Pepper.
         if not self._is_connected:

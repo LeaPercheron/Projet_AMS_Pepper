@@ -156,6 +156,15 @@ class PepperAssistant:
             if self.config.mode != RunMode.SIMULATION:
                 if self.adapter.connect():
                     self.logger.log_info(f"  Adaptateur: {adapter_type} (connecte)")
+                    audio_fmt = self._get_adapter_audio_format()
+                    control_mode = os.getenv("PEPPER_CONTROL_MODE", "").strip().lower()
+                    if not control_mode:
+                        control_mode = "choregraphe" if adapter_type == "ChoregrapheAdapter" else "auto"
+                    self.logger.log_info(
+                        "  Format capteurs: "
+                        f"{audio_fmt.get('sample_rate')}Hz/{audio_fmt.get('channels')}ch "
+                        f"(control_mode={control_mode})"
+                    )
                 else:
                     self.logger.log_warning(f"  Adaptateur: {adapter_type} (echec connexion)")
             else:
@@ -230,6 +239,20 @@ class PepperAssistant:
                 database_path=self.config.database.db_path
             )
             self.logger.log_info(f"  Vision: {self.config.vision.vlm_model}")
+            try:
+                pipeline = getattr(self.vision_pipeline, "pipeline", None)
+                detector = getattr(pipeline, "barcode_detector", None) if pipeline else None
+                vlm = getattr(pipeline, "vlm", None) if pipeline else None
+                pyzbar_ready = bool(getattr(detector, "_pyzbar_available", False))
+                openai_barcode_ready = bool(getattr(detector, "_openai_client", None))
+                self.logger.log_info(
+                    "  Vision status: "
+                    f"barcode_pyzbar={'on' if pyzbar_ready else 'off'}, "
+                    f"barcode_openai={'on' if openai_barcode_ready else 'off'}, "
+                    f"vlm_loaded={'yes' if bool(getattr(vlm, 'is_loaded', False)) else 'no'}"
+                )
+            except Exception:
+                pass
             if self._vlm_disabled:
                 self.logger.log_warning(
                     "  Vision: VLM désactivé via PEPPER_VLM_DISABLED, mode scan code-barres prioritaire"
@@ -242,6 +265,13 @@ class PepperAssistant:
                         loaded = await asyncio.to_thread(self.vision_pipeline.load)
                         if loaded:
                             self.logger.log_info("  Vision: préchargement VLM OK")
+                            try:
+                                pipeline = getattr(self.vision_pipeline, "pipeline", None)
+                                vlm = getattr(pipeline, "vlm", None) if pipeline else None
+                                backend = str(getattr(vlm, "_backend", "unknown") or "unknown")
+                                self.logger.log_info(f"  Vision: backend actif = {backend}")
+                            except Exception:
+                                pass
                         else:
                             self._vlm_disabled = True
                             self.logger.log_warning(
@@ -287,29 +317,50 @@ class PepperAssistant:
         except Exception as e:
             self.logger.log_warning(f"  Fallback HTTP non initialisé: {e}")
 
-        disable_realtime = os.getenv("OPENAI_REALTIME_DISABLED", "").strip().lower()
-        if disable_realtime in {"1", "true", "yes", "on"}:
-            self.logger.log_warning("  OpenAI Realtime desactive via OPENAI_REALTIME_DISABLED")
-            return
+        # Branche vocale HTTP/Whisper: Realtime volontairement désactivé.
+        self.logger.log_info("  OpenAI Realtime: désactivé sur cette branche (HTTP/Whisper uniquement)")
+        self.openai_client = None
+        return
 
-        try:
-            from assistant.realtime import OpenAIRealtimeClient, RealtimeConfig
+    def _get_adapter_audio_format(self) -> dict:
+        # Format audio actif depuis l'adaptateur (ou configuration par défaut).
+        fmt = {
+            "sample_rate": int(self.config.audio.input_sample_rate),
+            "channels": int(self.config.audio.input_channels),
+            "sample_width": 2,
+        }
 
-            if self.config.openai.api_key:
-                realtime_config = RealtimeConfig(
-                    api_key=self.config.openai.api_key,
-                    model=self.config.openai.model,
-                    voice=self.config.openai.voice
-                )
+        if not self.adapter:
+            return fmt
 
-                self.openai_client = OpenAIRealtimeClient(realtime_config)
-                self.logger.log_info(f"  OpenAI Realtime: {self.config.openai.model}")
-                self._register_realtime_tablet_callbacks()
+        getter = None
+        if hasattr(self.adapter, "get_audio_active_format"):
+            getter = getattr(self.adapter, "get_audio_active_format")
+        elif hasattr(self.adapter, "get_audio_capture_format"):
+            getter = getattr(self.adapter, "get_audio_capture_format")
 
-        except ImportError as e:
-            self.logger.log_warning(f"Module OpenAI non disponible: {e}")
-        except Exception as e:
-            self.logger.log_error("Erreur chargement audio", exception=e)
+        if getter:
+            try:
+                adapter_fmt = getter() or {}
+                if isinstance(adapter_fmt, dict):
+                    sr = int(adapter_fmt.get("sample_rate", 0) or 0)
+                    ch = int(adapter_fmt.get("channels", 0) or 0)
+                    sw = int(adapter_fmt.get("sample_width", 0) or 0)
+                    if sr > 0:
+                        fmt["sample_rate"] = sr
+                    if ch > 0:
+                        fmt["channels"] = ch
+                    if sw > 0:
+                        fmt["sample_width"] = sw
+            except Exception:
+                pass
+
+        if fmt["sample_rate"] <= 0:
+            fmt["sample_rate"] = int(self.config.audio.input_sample_rate)
+        if fmt["channels"] <= 0:
+            fmt["channels"] = int(self.config.audio.input_channels)
+
+        return fmt
 
     async def _setup_tablet(self):
         # Configure le serveur tablette.
@@ -397,22 +448,36 @@ class PepperAssistant:
             transcription_model = (
                 os.getenv("OPENAI_HTTP_TRANSCRIPTION_MODEL", "").strip()
                 or self.config.openai.http_transcription_model
+                or "whisper-1"
             )
 
-            input_sr = getattr(getattr(self.adapter, "config", None), "sample_rate", None)
-            if not input_sr:
-                input_sr = self.config.audio.input_sample_rate
+            detected_fmt = self._get_adapter_audio_format()
+            input_sr = int(detected_fmt.get("sample_rate") or self.config.audio.input_sample_rate)
+            input_ch = int(detected_fmt.get("channels") or self.config.audio.input_channels)
 
-            input_ch = getattr(getattr(self.adapter, "config", None), "channels_in", None)
-            if not input_ch:
-                input_ch = self.config.audio.input_channels
-
-            mono_channel_index = int(os.getenv("OPENAI_HTTP_MONO_CHANNEL_INDEX", "2") or "2")
+            mono_channel_index = int(os.getenv("OPENAI_HTTP_MONO_CHANNEL_INDEX", "0") or "0")
             front_only = os.getenv("PEPPER_AUDIO_RECORDER_FRONT_ONLY", "1").strip().lower() in {"1", "true", "yes", "on"}
             if self.adapter.__class__.__name__ == "PepperAdapter" and front_only:
                 input_sr = 16000
                 input_ch = 1
                 mono_channel_index = 0
+            if self.adapter.__class__.__name__ == "ChoregrapheAdapter":
+                if input_sr <= 0:
+                    input_sr = 16000
+                if input_ch <= 0:
+                    input_ch = 1
+            if input_ch <= 1:
+                mono_channel_index = 0
+
+            if self.adapter.__class__.__name__ == "ChoregrapheAdapter":
+                self.logger.log_info(
+                    "  Format fallback audio (pré-démarrage): "
+                    f"{input_sr}Hz/{input_ch}ch (choregraphe)"
+                )
+            else:
+                self.logger.log_info(
+                    f"  Format fallback audio (pré-démarrage): {input_sr}Hz/{input_ch}ch"
+                )
 
             vf_config = VoiceFallbackConfig(
                 input_sample_rate=int(input_sr),
@@ -1121,6 +1186,9 @@ class PepperAssistant:
             barcode = None
 
         if not barcode or not getattr(barcode, "ean13", None):
+            self.logger.log_info(
+                f"  Scan code-barres: aucun EAN trouvé sur {len(images)} image(s)"
+            )
             return False, "", None
 
         ean = str(barcode.ean13 or "").strip()
@@ -1356,6 +1424,25 @@ class PepperAssistant:
             return "error", message
         self._vlm_runtime_failures = 0
 
+        try:
+            raw_source = (
+                getattr(getattr(raw, "source", None), "value", "")
+                if raw else ""
+            ) or "unknown"
+            top_name = ""
+            top_conf = 0.0
+            top_prediction = getattr(result, "top_prediction", None)
+            if top_prediction:
+                top_name = str(getattr(top_prediction, "name", "") or "")
+                top_conf = float(getattr(top_prediction, "confidence", 0.0) or 0.0)
+            self.logger.log_info(
+                "  Scan visuel: résultat VLM "
+                f"(source={raw_source}, top='{top_name}', conf={top_conf:.2f}, "
+                f"success={bool(getattr(result, 'success', False))})"
+            )
+        except Exception:
+            pass
+
         if raw and getattr(raw, "source", None) and getattr(raw.source, "value", "") == "vlm_medium":
             top3_payloads = []
             for pred in (getattr(result, "predictions", []) or [])[:3]:
@@ -1378,6 +1465,13 @@ class PepperAssistant:
                 top3_payloads.append(payload)
 
             if top3_payloads:
+                self.logger.log_info(
+                    "  Scan visuel: top3 candidats = "
+                    + ", ".join(
+                        f"{str(item.get('name', '') or '').strip()} ({float(item.get('confidence', 0.0) or 0.0):.2f})"
+                        for item in top3_payloads[:3]
+                    )
+                )
                 return "top3", top3_payloads
 
         ean = ""
@@ -1843,19 +1937,29 @@ class PepperAssistant:
             websocket=websocket,
         )
 
-        # En mode ALAudioRecorder, ajuster le fallback avec le format réellement observé.
+        # Ajuster dynamiquement le fallback avec le format réellement observé.
         vf_config = getattr(self.voice_fallback, "config", None)
-        detected_channels = int(getattr(self.adapter, "_audio_pull_detected_channels", 0) or 0)
-        detected_rate = int(getattr(self.adapter, "_audio_pull_detected_rate", 0) or 0)
-        if vf_config and detected_channels > 0 and vf_config.input_channels != detected_channels:
-            vf_config.input_channels = detected_channels
+        if vf_config:
+            detected = self._get_adapter_audio_format()
+            detected_channels = int(detected.get("channels", 0) or 0)
+            detected_rate = int(detected.get("sample_rate", 0) or 0)
+
+            if detected_channels > 0 and vf_config.input_channels != detected_channels:
+                vf_config.input_channels = detected_channels
             self.logger.log_info(
-                f"  Fallback vocal: canaux audio ajustés à {detected_channels} (ALAudioRecorder)"
+                f"  Fallback vocal: canaux audio ajustés à {detected_channels}"
             )
-        if vf_config and detected_rate > 0 and vf_config.input_sample_rate != detected_rate:
-            vf_config.input_sample_rate = detected_rate
+            if detected_rate > 0 and vf_config.input_sample_rate != detected_rate:
+                vf_config.input_sample_rate = detected_rate
+                self.logger.log_info(
+                    f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz"
+                )
+            if detected_channels <= 1:
+                vf_config.mono_channel_index = 0
+            elif vf_config.input_channels > 1 and vf_config.mono_channel_index >= vf_config.input_channels:
+                vf_config.mono_channel_index = 0
             self.logger.log_info(
-                f"  Fallback vocal: fréquence audio ajustée à {detected_rate} Hz (ALAudioRecorder)"
+                f"  Fallback vocal: index mono = {vf_config.mono_channel_index}"
             )
 
         if hasattr(self.voice_fallback, "arm_listen_window"):
