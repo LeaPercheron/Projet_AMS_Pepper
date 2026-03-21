@@ -156,6 +156,15 @@ class PepperAssistant:
             if self.config.mode != RunMode.SIMULATION:
                 if self.adapter.connect():
                     self.logger.log_info(f"  Adaptateur: {adapter_type} (connecte)")
+                    audio_fmt = self._get_adapter_audio_format()
+                    control_mode = os.getenv("PEPPER_CONTROL_MODE", "").strip().lower()
+                    if not control_mode:
+                        control_mode = "choregraphe" if adapter_type == "ChoregrapheAdapter" else "auto"
+                    self.logger.log_info(
+                        "  Format capteurs: "
+                        f"{audio_fmt.get('sample_rate')}Hz/{audio_fmt.get('channels')}ch "
+                        f"(control_mode={control_mode})"
+                    )
                 else:
                     self.logger.log_warning(f"  Adaptateur: {adapter_type} (echec connexion)")
             else:
@@ -164,6 +173,41 @@ class PepperAssistant:
 
         except Exception as e:
             self.logger.log_error("Erreur chargement adaptateur", exception=e)
+
+    def _get_adapter_audio_format(self) -> dict:
+        # Format audio actif depuis l'adaptateur (ou configuration par défaut).
+        fmt = {
+            "sample_rate": int(self.config.audio.input_sample_rate),
+            "channels": int(self.config.audio.input_channels),
+            "sample_width": 2,
+        }
+        if not self.adapter:
+            return fmt
+        getter = None
+        if hasattr(self.adapter, "get_audio_active_format"):
+            getter = getattr(self.adapter, "get_audio_active_format")
+        elif hasattr(self.adapter, "get_audio_capture_format"):
+            getter = getattr(self.adapter, "get_audio_capture_format")
+        if getter:
+            try:
+                adapter_fmt = getter() or {}
+                if isinstance(adapter_fmt, dict):
+                    sr = int(adapter_fmt.get("sample_rate", 0) or 0)
+                    ch = int(adapter_fmt.get("channels", 0) or 0)
+                    sw = int(adapter_fmt.get("sample_width", 0) or 0)
+                    if sr > 0:
+                        fmt["sample_rate"] = sr
+                    if ch > 0:
+                        fmt["channels"] = ch
+                    if sw > 0:
+                        fmt["sample_width"] = sw
+            except Exception:
+                pass
+        if fmt["sample_rate"] <= 0:
+            fmt["sample_rate"] = int(self.config.audio.input_sample_rate)
+        if fmt["channels"] <= 0:
+            fmt["channels"] = int(self.config.audio.input_channels)
+        return fmt
 
     async def _setup_database(self):
         # Configure le module base de donnees.
@@ -287,9 +331,12 @@ class PepperAssistant:
         except Exception as e:
             self.logger.log_warning(f"  Fallback HTTP non initialisé: {e}")
 
+        # Branche Choreographe: uniquement HTTP/Whisper, Realtime désactivé.
+        adapter_type = type(self.adapter).__name__ if self.adapter else ""
         disable_realtime = os.getenv("OPENAI_REALTIME_DISABLED", "").strip().lower()
-        if disable_realtime in {"1", "true", "yes", "on"}:
-            self.logger.log_warning("  OpenAI Realtime desactive via OPENAI_REALTIME_DISABLED")
+        if adapter_type == "ChoregrapheAdapter" or disable_realtime in {"1", "true", "yes", "on"}:
+            self.logger.log_info("  OpenAI Realtime: désactivé (mode Choreographe / HTTP Whisper uniquement)")
+            self.openai_client = None
             return
 
         try:
@@ -301,7 +348,6 @@ class PepperAssistant:
                     model=self.config.openai.model,
                     voice=self.config.openai.voice
                 )
-
                 self.openai_client = OpenAIRealtimeClient(realtime_config)
                 self.logger.log_info(f"  OpenAI Realtime: {self.config.openai.model}")
                 self._register_realtime_tablet_callbacks()
@@ -397,22 +443,31 @@ class PepperAssistant:
             transcription_model = (
                 os.getenv("OPENAI_HTTP_TRANSCRIPTION_MODEL", "").strip()
                 or self.config.openai.http_transcription_model
+                or "whisper-1"
             )
 
-            input_sr = getattr(getattr(self.adapter, "config", None), "sample_rate", None)
-            if not input_sr:
-                input_sr = self.config.audio.input_sample_rate
+            detected_fmt = self._get_adapter_audio_format()
+            input_sr = int(detected_fmt.get("sample_rate") or self.config.audio.input_sample_rate)
+            input_ch = int(detected_fmt.get("channels") or self.config.audio.input_channels)
 
-            input_ch = getattr(getattr(self.adapter, "config", None), "channels_in", None)
-            if not input_ch:
-                input_ch = self.config.audio.input_channels
-
-            mono_channel_index = int(os.getenv("OPENAI_HTTP_MONO_CHANNEL_INDEX", "2") or "2")
+            mono_channel_index = int(os.getenv("OPENAI_HTTP_MONO_CHANNEL_INDEX", "0") or "0")
             front_only = os.getenv("PEPPER_AUDIO_RECORDER_FRONT_ONLY", "1").strip().lower() in {"1", "true", "yes", "on"}
             if self.adapter.__class__.__name__ == "PepperAdapter" and front_only:
                 input_sr = 16000
                 input_ch = 1
                 mono_channel_index = 0
+            if self.adapter.__class__.__name__ == "ChoregrapheAdapter":
+                if input_sr <= 0:
+                    input_sr = 16000
+                if input_ch <= 0:
+                    input_ch = 1
+            if input_ch <= 1:
+                mono_channel_index = 0
+
+            self.logger.log_info(
+                f"  Format fallback audio: {input_sr}Hz/{input_ch}ch "
+                f"(adaptateur={self.adapter.__class__.__name__})"
+            )
 
             vf_config = VoiceFallbackConfig(
                 input_sample_rate=int(input_sr),
